@@ -1,0 +1,14 @@
+# DeepSeek Harness 本地覆盖层：注册学习库生成工具
+#
+# 用法：
+#   npx -y @deepseek-ai/dsh --profile headless --patch ./dsh-plugin/dsh.yml \
+#     "用 study_library_generate 为主题「系统架构设计」生成学习库，先运行 study_library_doctor 检查环境"
+#
+# 说明：
+#   - name 必须是插件入口的绝对路径；
+#   - 移动仓库后请同步修改这里的路径；
+#   - 该层只追加一个插件，不覆盖任何内置工具。
+
+- insert:
+    - id: aimcram-agent
+      name: '/Users/kuangjixiang/dev/aimcram/platform/aimcram-agent/dsh-plugin/index.mjs'
