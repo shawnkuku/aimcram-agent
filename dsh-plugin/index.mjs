@@ -5,7 +5,7 @@
  *
  *   - insert:
  *       - id: aimcram-agent
- *         name: '/绝对路径/platform/aimcram-agent/dsh-plugin/index.mjs'
+ *         name: '/绝对路径/services/aimcram-agent/dsh-plugin/index.mjs'
  *
  * 暴露的工具：
  *   study_library_generate  三模式生成（sources / web / combined）

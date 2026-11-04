@@ -26,7 +26,7 @@
 ## 2. 目录结构
 
 ```
-platform/aimcram-agent/
+services/aimcram-agent/
 ├── cli.mjs                    # 命令行入口（generate / verify / unpack / doctor / eval）
 ├── dsh-plugin/
 │   ├── index.mjs              # DSH 插件：注册 4 个原生工具
@@ -53,7 +53,7 @@ platform/aimcram-agent/
 ## 3. 安装
 
 ```bash
-cd platform/aimcram-agent
+cd services/aimcram-agent
 npm install
 ```
 
@@ -191,7 +191,7 @@ jiakao-1.0.0/
 2. 填入**绝对路径**（相对路径会被判为“不是有效包”）：
 
    ```
-   /Users/kuangjixiang/dev/aimcram/platform/aimcram-agent/dsh-plugin
+   /Users/kuangjixiang/dev/aimcram/services/aimcram-agent/dsh-plugin
    ```
 
 3. 确认后按提示重启 Harness，三个 `study_library_*` 工具即可在对话中使用。
@@ -199,7 +199,7 @@ jiakao-1.0.0/
 也可以在终端安装（需先退出 Harness）：
 
 ```bash
-dsh plugin --profile desktop add /Users/kuangjixiang/dev/aimcram/platform/aimcram-agent/dsh-plugin
+dsh plugin --profile desktop add /Users/kuangjixiang/dev/aimcram/services/aimcram-agent/dsh-plugin
 ```
 
 ### 5.2 CLI 覆盖层加载（免安装）

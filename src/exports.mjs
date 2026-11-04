@@ -1,7 +1,7 @@
 /**
  * 产物出口：App 运行数据（data.js / kb.js）与独立 Markdown 导出。
  *
- * 复用 platform/tools 下已经过验证的转换器，避免出现第二套字段映射。
+ * 复用 services/tools 下已经过验证的转换器，避免出现第二套字段映射。
  */
 
 import fs from 'node:fs';

@@ -1,8 +1,8 @@
 /**
  * 学习库生成：大纲 → 知识点/关联 → 题目 → kshare Markdown → 官方校验 → 生成 JSON
  *
- * 关键取舍：不自己发明内容格式，而是渲染成 platform/README.md 定义的 kshare Markdown，
- * 再交给 platform/tools/kshare.mjs（--strict）产出 content/library.json。
+ * 关键取舍：不自己发明内容格式，而是渲染成 services/README.md 定义的 kshare Markdown，
+ * 再交给 services/tools/kshare.mjs（--strict）产出 content/library.json。
  * 这样题目 id、字段裁剪、错误码与现有 App 完全一致，天然满足「可直接导入」。
  */
 

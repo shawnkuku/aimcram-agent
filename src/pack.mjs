@@ -1,7 +1,7 @@
 /**
  * 学习库包（kshare-pack/v1）组包、校验、解包
  *
- * 严格对齐 platform/STUDY-LIBRARY-SPEC.md：
+ * 严格对齐 services/STUDY-LIBRARY-SPEC.md：
  * - 目录：<slug>-<version>/manifest.json + content/library.json + resources/images/… (+ source/)
  * - fingerprint = sha256(canonicalJson({chapters, knowledge}))
  * - 资源引用统一 resources/ 前缀，只做前缀映射，不改文件名与字节

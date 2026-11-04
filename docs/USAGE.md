@@ -1,6 +1,6 @@
 # 分步使用文档
 
-本文从零开始，按顺序说明如何安装、配置、生成、校验并导入学习库。命令默认在 `platform/aimcram-agent/` 目录执行；其它目录请自行替换路径。
+本文从零开始，按顺序说明如何安装、配置、生成、校验并导入学习库。命令默认在 `services/aimcram-agent/` 目录执行；其它目录请自行替换路径。
 
 ---
 
@@ -20,7 +20,7 @@ node -v
 ## 第 1 步：安装依赖
 
 ```bash
-cd platform/aimcram-agent
+cd services/aimcram-agent
 npm install
 ```
 
@@ -59,13 +59,13 @@ node cli.mjs doctor
 
 ```
 依赖  cheerio✓ jsdom✓ @mozilla/readability✓ robots-parser✓ pdfjs-dist✓ mammoth✓
-kshare ✓ 已找到 platform/tools/kshare.mjs
+kshare ✓ 已找到 services/tools/kshare.mjs
 OCR   macOS Vision ✓
 DeepSeek 未配置（可用 --mock 离线生成）
 抓取  限速 1500ms · 最多 8 页 · 检索 duckduckgo
 ```
 
-退出码为 0 表示依赖与 `platform/tools/kshare.mjs` 均可用。
+退出码为 0 表示依赖与 `services/tools/kshare.mjs` 均可用。
 
 ## 第 4 步：模式一（指定输入源）
 
@@ -222,7 +222,7 @@ node cli.mjs unpack out/<slug>-<version>.zip -o work/
 
 # 同时生成 App 运行数据 data.js / kb.js
 node cli.mjs generate --topic 系统架构设计 --source samples/architecture-notes.md \
-  --emit app --app-dir ../app/data
+  --emit app --app-dir ../apps/desktop/src
 ```
 
 `verify` 退出码：0 通过，1 失败。常见错误码含义见第 10 步。
@@ -254,7 +254,7 @@ node cli.mjs verify out/jiakao-1.0.0.zip --strict
 2. 填**绝对路径**（相对路径会报“请输入有效的包名或地址”）：
 
    ```
-   /Users/kuangjixiang/dev/aimcram/platform/aimcram-agent/dsh-plugin
+   /Users/kuangjixiang/dev/aimcram/services/aimcram-agent/dsh-plugin
    ```
 
 3. 按提示重启 Harness，`study_library_*` 四个工具即可使用（生成时自动复用 Harness 当前所选模型）。
@@ -262,7 +262,7 @@ node cli.mjs verify out/jiakao-1.0.0.zip --strict
 终端安装等价命令（需先退出 Harness）：
 
 ```bash
-dsh plugin --profile desktop add /Users/kuangjixiang/dev/aimcram/platform/aimcram-agent/dsh-plugin
+dsh plugin --profile desktop add /Users/kuangjixiang/dev/aimcram/services/aimcram-agent/dsh-plugin
 ```
 
 ### 8.2 CLI 覆盖层（免安装）

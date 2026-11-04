@@ -11,4 +11,4 @@
 
 - insert:
     - id: aimcram-agent
-      name: '/Users/kuangjixiang/dev/aimcram/platform/aimcram-agent/dsh-plugin/index.mjs'
+      name: '/Users/kuangjixiang/dev/aimcram/services/aimcram-agent/dsh-plugin/index.mjs'

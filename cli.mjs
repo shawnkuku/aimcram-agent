@@ -379,7 +379,7 @@ async function cmdDoctor(opts) {
     const lines = [
       `aimcram-agent v${VERSION} · node ${process.version} · ${process.platform}`,
       `依赖        ${Object.entries(deps).map(([k, v]) => `${k}${v ? '✓' : '✗'}`).join('  ')}`,
-      `kshare      ${info.kshare ? '✓ 已找到 platform/tools/kshare.mjs' : '✗ 缺失'}`,
+      `kshare      ${info.kshare ? '✓ 已找到 services/tools/kshare.mjs' : '✗ 缺失'}`,
       `OCR         ${info.ocr.vision ? 'macOS Vision ✓' : info.ocr.tesseract ? 'tesseract ✓' : '✗ 不可用'}`,
       `DeepSeek    ${info.llm.apiKey ? `已配置 ${info.llm.apiKey}` : '未配置（可用 --mock 离线生成）'}`,
       `抓取        限速 ${info.crawl.rateLimitMs}ms · 最多 ${info.crawl.maxPages} 页 · 检索 ${info.crawl.searchProvider}`,

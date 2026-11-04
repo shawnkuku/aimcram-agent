@@ -24,7 +24,7 @@ export async function extractPdf(buffer, { file = '', title = '' } = {}) {
     pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   } catch (err) {
     throw new AgentError('LA014', '缺少 pdfjs-dist，无法解析 PDF', {
-      hint: '在 platform/aimcram-agent 执行 npm install',
+      hint: '在 services/aimcram-agent 执行 npm install',
       cause: err
     });
   }

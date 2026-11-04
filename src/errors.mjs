@@ -22,7 +22,7 @@ export const ERROR_CATALOG = {
   LA011: { message: '没有可用的有效内容', hint: '检查输入源是否为空、是否为扫描件（需 OCR）或抓取页面是否被反爬' },
   LA012: { message: '参数非法', hint: '运行 --help 查看参数说明' },
   LA013: { message: '输出目录不可写', hint: '检查目录权限或改用 --out 指定可写目录' },
-  LA014: { message: '技能依赖缺失', hint: '在 platform/aimcram-agent 执行 npm install' },
+  LA014: { message: '技能依赖缺失', hint: '在 services/aimcram-agent 执行 npm install' },
   LA015: { message: '写包时发现同名 slug+version 冲突', hint: '提升 --version 或换 --slug' },
   LA016: { message: '用户取消了生成', hint: '大纲未被确认，重新发起并确认大纲即可继续' },
   LA017: { message: '操作未获授权', hint: '该操作需要在 Harness 权限提示中选择「允许」后重试', retryable: true },
