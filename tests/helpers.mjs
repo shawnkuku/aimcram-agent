@@ -8,10 +8,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import http from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { writeZip } from '../src/zip.mjs';
+import { AgentError } from '../src/errors.mjs';
 
 export const FIXTURE_TEXT = `网络体系结构
 
@@ -203,71 +203,35 @@ export function buildFixtures(dir) {
   };
 }
 
+/** 足够长的「系统架构设计」Markdown 正文夹具（DeepSeek Fetch 返回形态）。 */
+export const ARTICLE_MD = `# 系统架构设计要点
+
+系统架构设计需要在质量属性之间做权衡，可用性、性能、安全性与可维护性往往互相制约。
+分层架构把系统划分为表现层、业务层与数据层，降低耦合，但请求需要逐层穿透，性能敏感场景要跨层优化。
+事件驱动架构通过事件总线解耦生产者与消费者，适合订单与风控场景，但需要处理最终一致性与重复消费。
+微服务架构按业务能力拆分服务，每个服务独立部署与独立数据库，带来团队自治的同时也增加了分布式事务与链路追踪的复杂度。`;
+
 /**
- * 启动本地站点：robots、正文、重复页、私有页、短页、检索接口。
- * @returns {Promise<{url: string, close: () => Promise<void>, hits: Record<string, number>}>}
+ * 离线 DeepSeekTools 替身：search 返回预设候选，fetchPage 返回预设 Markdown 页。
+ * @param {{results?: Array, pages?: Record<string, string|{title?: string, markdown: string}>, failSearch?: Error}} fixture
  */
-export async function startSite() {
-  const hits = {};
-  const articleHtml = HTML_PAGE.replace(/<nav>[\s\S]*?<\/nav>/, '<nav><a href="/">首页</a></nav>');
-  const page = (body) => `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>系统架构设计</title></head><body>${body}</body></html>`;
-  const article = page(`<article><h1>系统架构设计要点</h1>
-<p>系统架构设计需要在质量属性之间做权衡，可用性、性能、安全性与可维护性往往互相制约。</p>
-<p>分层架构把系统划分为表现层、业务层与数据层，降低耦合，但请求需要逐层穿透，性能敏感场景要跨层优化。</p>
-<p>事件驱动架构通过事件总线解耦生产者与消费者，适合订单与风控场景，但需要处理最终一致性与重复消费。</p>
-<p>微服务架构按业务能力拆分服务，每个服务独立部署与独立数据库，带来团队自治的同时也增加了分布式事务与链路追踪的复杂度。</p></article>`);
-  const short = page('<article><p>系统架构设计简介，内容很短。</p></article>');
-
-  const server = http.createServer((req, res) => {
-    const url = new URL(req.url, 'http://127.0.0.1');
-    hits[url.pathname] = (hits[url.pathname] || 0) + 1;
-    if (url.pathname === '/robots.txt') {
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('User-agent: *\nDisallow: /private\nAllow: /\nCrawl-delay: 0\n');
-      return;
-    }
-    if (url.pathname === '/search') {
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({
-        results: [
-          { title: '系统架构设计要点', url: `http://127.0.0.1:${server.address().port}/article`, content: '架构设计' },
-          { title: '私密页', url: `http://127.0.0.1:${server.address().port}/private/secret`, content: '架构设计' },
-          { title: '重复页', url: `http://127.0.0.1:${server.address().port}/article-dup`, content: '架构设计' },
-          { title: '短页', url: `http://127.0.0.1:${server.address().port}/short`, content: '架构设计' }
-        ]
-      }));
-      return;
-    }
-    if (url.pathname === '/article' || url.pathname === '/article-dup') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(article);
-      return;
-    }
-    if (url.pathname === '/private/secret') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(articleHtml);
-      return;
-    }
-    if (url.pathname === '/short') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(short);
-      return;
-    }
-    if (url.pathname === '/redirect') {
-      res.writeHead(302, { Location: '/article' });
-      res.end();
-      return;
-    }
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('not found');
-  });
-
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const port = server.address().port;
+export function makeFakeTools({ results = [], pages = {}, failSearch = null } = {}) {
   return {
-    url: `http://127.0.0.1:${port}`,
-    hits,
-    close: () => new Promise((resolve) => server.close(resolve))
+    stats: { searchCalls: 0, fetchCalls: 0, retries: 0, bytes: 0 },
+    async search(query) {
+      this.stats.searchCalls++;
+      if (failSearch) throw failSearch;
+      return results.map((r) => ({ ...r, query }));
+    },
+    async fetchPage(url) {
+      this.stats.fetchCalls++;
+      const page = pages[url.split('#')[0]];
+      if (!page) throw new AgentError('LA006', `未能获取可用网页内容：${url}`);
+      const markdown = typeof page === 'string' ? page : page.markdown;
+      const title = typeof page === 'string' ? '' : page.title || '';
+      this.stats.bytes += Buffer.byteLength(markdown, 'utf8');
+      return { url, finalUrl: url, title, markdown, bytes: Buffer.byteLength(markdown, 'utf8') };
+    }
   };
 }
 

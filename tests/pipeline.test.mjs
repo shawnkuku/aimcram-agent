@@ -5,7 +5,7 @@ import path from 'node:path';
 import { runPipeline } from '../src/pipeline.mjs';
 import { verifyPack } from '../src/pack.mjs';
 import { createReporter } from '../src/log.mjs';
-import { makeTempDir, startSite, FIXTURE_TEXT } from './helpers.mjs';
+import { makeTempDir, makeFakeTools, FIXTURE_TEXT, ARTICLE_MD } from './helpers.mjs';
 
 function writeNotes(dir, name = 'notes.md') {
   const file = path.join(dir, name);
@@ -22,9 +22,7 @@ function writeNotes(dir, name = 'notes.md') {
 
 function baseConfig(overrides = {}) {
   return {
-    rateLimitMs: 5,
     crawlTimeoutMs: 5000,
-    allowPrivateHosts: true,
     maxPages: 3,
     maxDepth: 0,
     minContentChars: 150,
@@ -101,17 +99,19 @@ test('模式一：指定输入源 → 学习库包', async (t) => {
   });
 });
 
-test('模式二：只给主题，通过合规抓取生成学习库', async (t) => {
-  const site = await startSite();
+test('模式二：只给主题，通过 DeepSeek 检索抓取生成学习库', async (t) => {
   const root = makeTempDir('la-pipe-web-');
-  t.after(async () => {
-    await site.close();
-    fs.rmSync(root, { recursive: true, force: true });
-  });
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
-  const config = baseConfig({
-    searchProvider: 'custom',
-    searchEndpoint: `${site.url}/search?q={query}`
+  const tools = makeFakeTools({
+    results: [
+      { title: '系统架构设计要点', url: 'https://example.com/article', snippet: '' },
+      { title: '短页', url: 'https://example.com/short', snippet: '' }
+    ],
+    pages: {
+      'https://example.com/article': { title: '系统架构设计要点', markdown: ARTICLE_MD },
+      'https://example.com/short': { title: '短页', markdown: '系统架构设计简介，内容很短。' }
+    }
   });
 
   const result = await runPipeline({
@@ -119,7 +119,8 @@ test('模式二：只给主题，通过合规抓取生成学习库', async (t) =
     inputs: [],
     mode: 'web',
     mock: true,
-    config,
+    config: baseConfig(),
+    tools,
     outDir: path.join(root, 'out'),
     meta: { slug: 'pipe-web', version: '1.0.0' }
   });
@@ -128,36 +129,34 @@ test('模式二：只给主题，通过合规抓取生成学习库', async (t) =
   assert.equal(result.verification.ok, true);
   assert.ok(result.coverage.sources >= 1);
   assert.ok(result.crawl, '应包含抓取报告');
+  assert.equal(result.crawl.search.provider, 'deepseek');
   assert.equal(result.crawl.accepted, 1);
-  assert.match(result.crawl.userAgent, /^AimCramAgent\//);
-  assert.ok(result.crawl.rateLimitMs >= 1);
-  assert.ok(result.crawl.rejected.length >= 2, '私有页 / 短页 / 重复页应被记录');
-  assert.equal(site.hits['/private/secret'] || 0, 0);
+  assert.ok(result.crawl.rejected.some((r) => r.reason === 'too-short'), '短页应被丢弃');
+  assert.ok(result.crawl.tools.searchCalls >= 1);
+  assert.ok(result.crawl.tools.fetchCalls >= 1);
   assert.ok(fs.existsSync(result.paths.zip));
   assert.equal(verifyPack(result.paths.zip, { strict: true }).ok, true);
 });
 
-test('模式三：本地资料 + 自主抓取合并生成', async (t) => {
-  const site = await startSite();
+test('模式三：本地资料 + DeepSeek 抓取合并生成', async (t) => {
   const root = makeTempDir('la-pipe-combined-');
-  t.after(async () => {
-    await site.close();
-    fs.rmSync(root, { recursive: true, force: true });
-  });
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const md = writeNotes(root);
 
-  const config = baseConfig({
-    searchProvider: 'custom',
-    searchEndpoint: `${site.url}/search?q={query}`
+  const tools = makeFakeTools({
+    pages: {
+      'https://example.com/article': { title: '系统架构设计要点', markdown: ARTICLE_MD }
+    }
   });
 
   const result = await runPipeline({
     topic: '系统架构设计',
     inputs: [md],
-    seeds: [`${site.url}/article`],
+    seeds: ['https://example.com/article'],
     mode: 'combined',
     mock: true,
-    config,
+    config: baseConfig(),
+    tools,
     outDir: path.join(root, 'out'),
     meta: { slug: 'pipe-combined', version: '1.0.0' }
   });
@@ -165,8 +164,7 @@ test('模式三：本地资料 + 自主抓取合并生成', async (t) => {
   assert.equal(result.mode, 'combined');
   assert.equal(result.verification.ok, true);
   assert.equal(result.coverage.sources, 2, '本地文档 + 抓取文章');
-  assert.ok(result.coverage.byType.markdown >= 1);
-  assert.ok(result.coverage.byType.html >= 1);
+  assert.ok(result.coverage.byType.markdown >= 2, '本地 md 与抓取的 Markdown 都计入');
   assert.equal(result.crawl.accepted, 1);
   assert.equal(verifyPack(result.paths.zip, { strict: true }).ok, true);
 });
@@ -187,23 +185,23 @@ test('参数校验与错误码', async (t) => {
   });
 
   await t.test('抓取不到足够内容报 LA011', async () => {
-    const site = await startSite();
-    try {
-      await assert.rejects(
-        () => runPipeline({
-          topic: '系统架构设计',
-          inputs: [],
-          mode: 'web',
-          mock: true,
-          // 门槛抬高到远超示例页正文，模拟「抓到页但内容不足」的场景
-          config: baseConfig({ minContentChars: 10_000, searchEndpoint: `${site.url}/search?q={query}`, searchProvider: 'custom' }),
-          outDir: path.join(makeTempDir('la-pipe-err-'), 'out'),
-          meta: { slug: 'pipe-err' }
-        }),
-        (err) => err.code === 'LA011'
-      );
-    } finally {
-      await site.close();
-    }
+    const tools = makeFakeTools({
+      results: [{ title: '系统架构设计要点', url: 'https://example.com/article', snippet: '' }],
+      pages: { 'https://example.com/article': { title: '系统架构设计要点', markdown: ARTICLE_MD } }
+    });
+    await assert.rejects(
+      () => runPipeline({
+        topic: '系统架构设计',
+        inputs: [],
+        mode: 'web',
+        mock: true,
+        // 门槛抬高到远超示例页正文，模拟「抓到页但内容不足」的场景
+        config: baseConfig({ minContentChars: 10_000 }),
+        tools,
+        outDir: path.join(makeTempDir('la-pipe-err-'), 'out'),
+        meta: { slug: 'pipe-err' }
+      }),
+      (err) => err.code === 'LA011'
+    );
   });
 });

@@ -10,7 +10,7 @@ export const ERROR_CATALOG = {
   LA002: { message: '不支持的文件格式', hint: '支持的格式：md / txt / html / pdf / docx / png / jpg / jpeg / webp / bmp / gif' },
   LA003: { message: '内容提取失败', hint: '检查文件是否损坏；图片 OCR 需要 macOS Vision 或 tesseract' },
   LA004: { message: '输入源不存在或不可读', hint: '确认路径拼写，或改用 http(s) URL' },
-  LA005: { message: '网页抓取被 robots 协议或站点策略拒绝', hint: '更换来源，或改用已授权的输入源' },
+  LA005: { message: '目标站点安全策略拒绝抓取（DeepSeek Fetch 403）', hint: '更换来源，或改用已授权的输入源' },
   LA006: { message: '网络请求失败或超时', hint: '检查网络连通性；可降低 --pages 或稍后重试', retryable: true },
   LA007: {
     message: '未配置 DeepSeek API Key',

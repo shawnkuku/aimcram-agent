@@ -22,22 +22,13 @@ export const DEFAULTS = {
   /* 并发出题 / 出案例的请求数；单批最多输出 8000 token，需要更长的超时配合 */
   llmConcurrency: num(process.env.AIMCRAM_LLM_CONCURRENCY, 10),
 
-  // 抓取合规与限额
-  userAgent:
-    process.env.LA_USER_AGENT ||
-    `AimCramAgent/${VERSION} (+https://aimcram.example/bot; learning-library-builder; contact=ops@aimcram.example)`,
-  rateLimitMs: num(process.env.LA_RATE_LIMIT_MS, 1500),
+  // 联网检索与抓取限额（统一走 DeepSeek Search/Fetch API，按次计费）
   crawlTimeoutMs: num(process.env.LA_CRAWL_TIMEOUT_MS, 20_000),
   maxBytes: num(process.env.LA_MAX_BYTES, 5 * 1024 * 1024),
   maxPages: num(process.env.LA_MAX_PAGES, 8),
   maxDepth: num(process.env.LA_MAX_DEPTH, 1),
   minContentChars: num(process.env.LA_MIN_CONTENT_CHARS, 400),
   sameHostOnly: process.env.LA_SAME_HOST_ONLY !== '0',
-  searchProvider: process.env.LA_SEARCH_PROVIDER || 'searxng',
-  searxngUrl: process.env.LA_SEARXNG_URL || 'http://127.0.0.1:8888',
-  autoStartSearxng: process.env.LA_SEARXNG_AUTOSTART !== '0',
-  searchEndpoint: process.env.LA_SEARCH_ENDPOINT || '',
-  allowPrivateHosts: process.env.LA_ALLOW_PRIVATE_HOSTS === '1',
 
   // 产物
   outDir: process.env.LA_OUT_DIR || path.join(process.cwd(), 'out'),

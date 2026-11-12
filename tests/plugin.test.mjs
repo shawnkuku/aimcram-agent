@@ -82,7 +82,7 @@ test('DSH 工具：generate → verify → doctor', async (t) => {
   const doctor = await tools.get('study_library_doctor').execute();
   assert.equal(doctor.version, '1.0.0');
   assert.equal(doctor.deps['pdfjs-dist'], true);
-  assert.ok(doctor.crawl.userAgent.includes('AimCramAgent'));
+  assert.equal(doctor.crawl.provider, 'deepseek');
 
   await assert.rejects(
     () => tools.get('study_library_generate').execute({ mode: 'sources', mock: true }),

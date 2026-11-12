@@ -55,7 +55,6 @@ generate 选项：
                               auto：有输入源走模式一，否则模式二；combined 为模式三
   --seed <URL>                模式二 / 三的种子页面（可重复）
   --with-web                  模式一同时做自主抓取（等价于 --mode combined）
-  --search <provider>         auto / wikipedia / duckduckgo / searxng
   --pages <N>                 最多抓取页数（默认 8）
   --depth <N>                 站内跟进深度（默认 1）
   --per-section <N>           每节题目数（默认 2）
@@ -79,7 +78,7 @@ generate 选项：
   node cli.mjs generate --topic 网络体系结构 \\
     --source ./samples/architecture-notes.md,./screenshots/osi.png,https://example.com/osi
 
-  # 模式二：只给主题，自主检索抓取
+  # 模式二：只给主题，DeepSeek 联网检索抓取（需 DEEPSEEK_API_KEY，按次计费）
   node cli.mjs generate --topic "系统架构设计" --pages 6
 
   # 模式三：本地资料 + 自主补充
@@ -122,7 +121,6 @@ function parseArgs(argv) {
         break;
       }
       case '--mode': opts.mode = take(i, inline); if (inline == null) i++; break;
-      case '--search': opts.searchProvider = take(i, inline); if (inline == null) i++; break;
       case '--pages': opts.pages = Number(take(i, inline)); if (inline == null) i++; break;
       case '--depth': opts.depth = Number(take(i, inline)); if (inline == null) i++; break;
       case '--per-section': opts.perSection = Number(take(i, inline)); if (inline == null) i++; break;
@@ -147,7 +145,6 @@ function parseArgs(argv) {
         String(value).split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => opts.tags.push(s));
         break;
       }
-      case '--rate-limit': opts.rateLimitMs = Number(take(i, inline)); if (inline == null) i++; break;
       case '--mock': opts.mock = true; break;
       case '--with-web': opts.withWeb = true; break;
       case '--emit': opts.emit = take(i, inline); if (inline == null) i++; break;
@@ -187,11 +184,9 @@ async function cmdGenerate(opts) {
   const reporter = createReporter({ json: opts.jsonProgress, quiet: opts.quiet });
   const config = resolveConfig({
     outDir: opts.out,
-    searchProvider: opts.searchProvider,
     maxPages: opts.pages,
     maxDepth: opts.depth,
-    questionsPerSection: opts.perSection,
-    rateLimitMs: opts.rateLimitMs
+    questionsPerSection: opts.perSection
   });
   if (opts.emit === 'app' && !opts.appDir) {
     throw new AgentError('LA012', '--emit app 需要同时指定 --app-dir');
@@ -218,7 +213,6 @@ async function cmdGenerate(opts) {
     meta: { ...opts.meta, tags: opts.tags },
     outDir: config.outDir,
     emitAppDir: opts.emit === 'app' ? opts.appDir : '',
-    searchProvider: opts.searchProvider,
     force: opts.force,
     questionCount: opts.questionCount,
     caseCount: opts.caseCount,
@@ -257,7 +251,7 @@ async function cmdGenerate(opts) {
       out.push(`  质量      ${flags.join('，')}`);
     }
     out.push(`  来源      ${r.coverage.sources} 个（${Object.entries(r.coverage.byType).map(([k, v]) => `${k} ${v}`).join('，')}），有效 ${r.coverage.totalChars} 字`);
-    if (r.crawl) out.push(`  抓取      ${r.crawl.accepted ?? 0} 篇采纳 / ${r.crawl.rejected?.length ?? 0} 篇丢弃，robots 拦截 ${r.crawl.robotsBlocked ?? 0} 次`);
+    if (r.crawl) out.push(`  抓取      ${r.crawl.accepted ?? 0} 篇采纳 / ${r.crawl.rejected?.length ?? 0} 篇丢弃，DeepSeek 搜索 ${r.crawl.tools?.searchCalls ?? 0} 次 / 抓取 ${r.crawl.tools?.fetchCalls ?? 0} 次`);
     out.push(`  生成器    ${r.generator}`);
     if (r.verification.warnings.length) {
       out.push(`  警告      ${r.verification.warnings.length} 条`);
@@ -344,7 +338,7 @@ function cmdUnpack(opts, target) {
 async function cmdDoctor(opts) {
   const config = resolveConfig({});
   const deps = {};
-  for (const name of ['cheerio', 'jsdom', '@mozilla/readability', 'robots-parser', 'pdfjs-dist', 'mammoth']) {
+  for (const name of ['cheerio', 'jsdom', '@mozilla/readability', 'pdfjs-dist', 'mammoth']) {
     try {
       await import(name === 'pdfjs-dist' ? 'pdfjs-dist/legacy/build/pdf.mjs' : name);
       deps[name] = true;
@@ -365,10 +359,10 @@ async function cmdDoctor(opts) {
       model: config.model
     },
     crawl: {
-      userAgent: config.userAgent,
-      rateLimitMs: config.rateLimitMs,
-      searchProvider: config.searchProvider,
-      maxPages: config.maxPages
+      provider: 'deepseek',
+      maxPages: config.maxPages,
+      maxDepth: config.maxDepth,
+      crawlTimeoutMs: config.crawlTimeoutMs
     },
     kshare: fs.existsSync(path.resolve(HERE, '../tools/kshare.mjs'))
   };
@@ -382,8 +376,7 @@ async function cmdDoctor(opts) {
       `kshare      ${info.kshare ? '✓ 已找到 services/tools/kshare.mjs' : '✗ 缺失'}`,
       `OCR         ${info.ocr.vision ? 'macOS Vision ✓' : info.ocr.tesseract ? 'tesseract ✓' : '✗ 不可用'}`,
       `DeepSeek    ${info.llm.apiKey ? `已配置 ${info.llm.apiKey}` : '未配置（可用 --mock 离线生成）'}`,
-      `抓取        限速 ${info.crawl.rateLimitMs}ms · 最多 ${info.crawl.maxPages} 页 · 检索 ${info.crawl.searchProvider}`,
-      `User-Agent ${info.crawl.userAgent}`
+      `抓取        DeepSeek Search/Fetch · 最多 ${info.crawl.maxPages} 页 · 超时 ${info.crawl.crawlTimeoutMs}ms`
     ];
     process.stdout.write(lines.join('\n') + '\n');
   }
@@ -434,11 +427,9 @@ async function cmdInteract(opts) {
   const reporter = createReporter({ json: true, quiet: false });
   const config = resolveConfig({
     outDir: opts.out,
-    searchProvider: opts.searchProvider,
     maxPages: opts.pages,
     maxDepth: opts.depth,
-    questionsPerSection: opts.perSection,
-    rateLimitMs: opts.rateLimitMs
+    questionsPerSection: opts.perSection
   });
   if (opts.emit === 'app' && !opts.appDir) {
     throw new AgentError('LA012', '--emit app 需要同时指定 --app-dir');
@@ -467,7 +458,6 @@ async function cmdInteract(opts) {
       meta: { ...opts.meta, tags: opts.tags },
       outDir: config.outDir,
       emitAppDir: opts.emit === 'app' ? opts.appDir : '',
-      searchProvider: opts.searchProvider,
       force: opts.force,
       questionCount: opts.questionCount,
       caseCount: opts.caseCount,

@@ -28,8 +28,7 @@ npm install
 
 | 依赖 | 用途 |
 |---|---|
-| `@mozilla/readability` + `jsdom` + `cheerio` | 网页正文提取与 HTML 解析 |
-| `robots-parser` | robots.txt 解析（含 Crawl-delay） |
+| `@mozilla/readability` + `jsdom` + `cheerio` | 本地 HTML 文件正文提取 |
 | `pdfjs-dist` | PDF 文本层提取 |
 | `mammoth` | DOCX 解析（内置 OOXML 兜底） |
 
@@ -58,11 +57,11 @@ node cli.mjs doctor
 期望输出（节选）：
 
 ```
-依赖  cheerio✓ jsdom✓ @mozilla/readability✓ robots-parser✓ pdfjs-dist✓ mammoth✓
+依赖  cheerio✓ jsdom✓ @mozilla/readability✓ pdfjs-dist✓ mammoth✓
 kshare ✓ 已找到 services/tools/kshare.mjs
 OCR   macOS Vision ✓
 DeepSeek 未配置（可用 --mock 离线生成）
-抓取  限速 1500ms · 最多 8 页 · 检索 duckduckgo
+抓取  DeepSeek Search/Fetch · 最多 8 页 · 超时 20000ms
 ```
 
 退出码为 0 表示依赖与 `services/tools/kshare.mjs` 均可用。
@@ -92,7 +91,7 @@ node cli.mjs generate --topic 网络体系结构 \
 | `./a.docx` | Word 文档，段落顺序保留 |
 | `./a.pdf` | 文本层提取；扫描件会告警 |
 | `./a.png` `.jpg` `.jpeg` `.webp` `.bmp` `.gif` | 图片 OCR（中英） |
-| `https://…` | 在线页面，走完整 robots / 限速 / 正文提取 |
+| `https://…` | 在线页面，经 DeepSeek Fetch 抓取为 Markdown 正文 |
 | `text:任意文本` | 直接作为内联内容 |
 | `@clipboard` | macOS 剪贴板文本 |
 
@@ -112,72 +111,19 @@ node cli.mjs generate --topic 系统架构设计 --source samples/architecture-n
   --author "AimCram Learning Agent" --tags "架构,软考"
 ```
 
-## 第 5 步：模式二（自主检索抓取）
+## 第 5 步：模式二（联网检索抓取）
 
 ```bash
 node cli.mjs generate --topic "系统架构设计" --pages 6 --depth 1
 ```
 
-流程：检索候选 → 逐页 robots 校验与限速 → 正文提取 → 质量门槛（有效字符 / 主题相关度）→ 相似度去重 → 生成。
+流程：DeepSeek 检索候选 → 逐页 DeepSeek Fetch 抓取 Markdown 正文 → 质量门槛（有效字符 / 主题相关度）→ 相似度去重 → 生成。
 
-检索 provider：
+联网搜索与网页抓取统一由 **DeepSeek 官方 Search/Fetch API** 提供：
 
-| provider | 说明 |
-|---|---|
-| `wikipedia` | 官方 REST 检索，稳定、条款清晰 |
-| `duckduckgo` | HTML 结果页；部分网络环境会触发反爬 |
-| `searxng` | 自建实例 JSON 接口，**生产推荐** |
-| `custom` | 自建检索网关，支持 `{query}` 占位符，返回 SearXNG 兼容 JSON |
-
-### 5.1 本机 SearXNG（推荐，直接解决反爬）
-
-```bash
-# 手动启动（首次会自动克隆、建 Python 3.12 venv、装依赖、生成密钥，然后前台启动）
-./searxng/run.sh
-
-# 或者什么都不做：模式二/三探活发现本机 8888 拒绝连接时，会自动执行上面的脚本并等待就绪
-node cli.mjs generate --topic "系统架构设计" --search searxng --pages 6
-
-# 验证 JSON 接口
-curl 'http://127.0.0.1:8888/search?q=系统架构&format=json'
-```
-
-自动启动只对 loopback 地址生效，且端口上已有其他服务时不会接管；`LA_SEARXNG_AUTOSTART=0` 可关闭。
-
-配置在 [searxng/settings.yml](../searxng/settings.yml)，关键项：
-
-| 配置 | 值 | 原因 |
-|---|---|---|
-| `server.bind_address` | `127.0.0.1` | 只供本机，不对外暴露 |
-| `server.limiter` | `false` | 单用户本地实例，避免被限流 |
-| `search.formats` | `html`、`json` | Agent 需要 `format=json` |
-| `server.method` | `GET` | Agent 使用 GET 查询 |
-| `valkey.url` | `false` | 不依赖 Redis / Valkey |
-
-运行时文件（源码、venv、生成的 `settings.yml`）都在 `searxng/.runtime/`，已加入 `.gitignore`；删除即可重装。换端口：
-
-```bash
-SEARXNG_PORT=8890 ./searxng/run.sh
-export LA_SEARXNG_URL=http://127.0.0.1:8890
-```
-
-> 安全边界：只对**检索接口**放行本机地址（`fetchText` 的 `allowPrivate`），页面正文抓取仍然拒绝内网，`LA_ALLOW_PRIVATE_HOSTS` 保持 `0` 即可。
-
-### 5.2 远程 SearXNG
-
-```bash
-export LA_SEARXNG_URL=https://searx.example.com
-node cli.mjs generate --topic "系统架构设计" --search searxng --pages 6
-```
-
-远程实例同样需要在 `search.formats` 中开启 `json`，并允许你的出口 IP。
-
-自定义网关：
-
-```bash
-export LA_SEARCH_ENDPOINT='https://search.example.com/api?q={query}'
-node cli.mjs generate --topic "系统架构设计" --search custom
-```
+- 需 `DEEPSEEK_API_KEY`，按次计费；未配置时模式二 / 三会抛 `LA007`，离线场景可加 `--mock` 并改用本地文件输入。
+- 搜索只取标题 / URL / 摘要（`need_content=false`），正文逐页走 Fetch，失败直接报错提示，不做静默回退。
+- 常见错误：`401` Key 无效（`LA007`）；`402` 余额不足（先充值）；`403` 目标站点安全策略拒绝（`LA005`，该页跳过）；`404` 未能获取可用网页内容（`LA006`）；`408 / 429 / 5xx` 自动指数退避重试。
 
 也可以直接给种子页（跳过检索）：
 
@@ -186,13 +132,13 @@ node cli.mjs generate --topic "系统架构设计" \
   --seed https://example.com/arch/overview,https://example.com/arch/patterns
 ```
 
-抓取合规参数：
+抓取参数：
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `--pages` | 8 | 最多采纳页数 |
 | `--depth` | 1 | 站内跟进深度，`0` 表示只看种子 |
-| `--rate-limit` | 1500ms | 同主机最小间隔 |
+| `LA_CRAWL_TIMEOUT_MS` | 20000 | 单次搜索 / 抓取请求超时 |
 | `LA_MAX_BYTES` | 5MB | 单页响应体上限 |
 
 无可用内容时返回 `LA011`，`details.rejected` 会列出每页被拒原因（`LA005` / `too-short` / `low-relevance` / `duplicate`）。
@@ -308,7 +254,7 @@ node cli.mjs eval   # 提取质量评测
 | 文件 | 内容 |
 |---|---|
 | `tests/extract.test.mjs` | md / html / docx / pdf / OCR、类型识别、旧版 .doc、缺失文件 |
-| `tests/web.test.mjs` | robots 禁止不发请求、内网拒绝、响应体超限、robots 缓存、重定向、去重 |
+| `tests/web.test.mjs` | DeepSeek Search/Fetch 客户端（错误映射 / 重试）、检索合并去重、质量筛选、深挖链接 |
 | `tests/pack.test.mjs` | 组包结构、计数 / 指纹、目录与 ZIP strict 校验、篡改检测、LA015 |
 | `tests/pipeline.test.mjs` | 模式一 / 二 / 三、进度事件、`--emit app`、LA001 / LA011 |
 | `tests/cli.test.mjs` | generate → verify → unpack、NDJSON 进度、退出码、doctor |
@@ -340,7 +286,7 @@ Markdown 100.0%  纯文本 100.0%  HTML 97.8%  DOCX 100.0%  PDF 100.0%  OCR 100.
 | `mode` / `topic` / `slug` / `version` | 本次生成标识 |
 | `stats` | 章节 / 小节 / 题目 / 知识板块数量 |
 | `coverage` | 来源数、总有效字符、按类型统计、OCR 置信度、低置信度来源、告警 |
-| `crawl` | 抓取报告：采纳 / 拒绝、robots 拦截、请求数、字节数、UA、限速 |
+| `crawl` | 抓取报告：采纳 / 拒绝、DeepSeek 搜索与抓取调用次数、重试与字节数 |
 | `sources` | 每个来源的类型、路径 / URL、质量、告警 |
 | `notes` | 被跳过的来源与原因 |
 | `verification` | 包校验错误与警告 |
@@ -353,9 +299,9 @@ Markdown 100.0%  纯文本 100.0%  HTML 97.8%  DOCX 100.0%  PDF 100.0%  OCR 100.
 | `LA002` | 不支持的文件格式 | 转成 md/txt/html/pdf/docx/图片 |
 | `LA003` | 内容提取失败 | 检查文件损坏；确认 OCR 后端可用 |
 | `LA004` | 输入源不存在 / 不可读 | 检查路径与权限 |
-| `LA005` | robots 或站点策略拒绝 | 换来源；不要抓取非公开资源 |
-| `LA006` | 网络失败 / 超时 | 检查网络；降低 `--pages` 后重试 |
-| `LA007` | 未配置 DeepSeek Key | Harness 内先在设置里选模型；CLI 下设 `DEEPSEEK_API_KEY`，或加 `--mock` |
+| `LA005` | 目标站点安全策略拒绝抓取（DeepSeek Fetch 403） | 换来源；不要抓取非公开资源 |
+| `LA006` | 网络失败 / 超时 / 搜索无结果 / 余额不足 | 检查网络与账户余额；降低 `--pages` 后重试 |
+| `LA007` | DeepSeek Key 缺失或无效 | Harness 内先在设置里选模型；CLI 下设 `DEEPSEEK_API_KEY`，或加 `--mock` |
 | `LA008` | LLM 空输出 / 截断 / 无法解析 | 适配层会自动重试并放大预算；仍失败时换更强模型或减少单次资料量 |
 | `LA009` | 未通过 kshare 校验 | 查看报告中的 E0xx |
 | `LA010` | 学习库包校验失败 | `verify` 查看 E1xx / W1xx |
@@ -369,17 +315,11 @@ Markdown 100.0%  纯文本 100.0%  HTML 97.8%  DOCX 100.0%  PDF 100.0%  OCR 100.
 
 ## 第 11 步：常见问题
 
-**Q：模式二一直返回 LA011？**
-先看报告 `crawl.rejected`。若多为 `LA005`，说明 robots 禁止；若为 `too-short`，多为页面正文过短或模板站点；若为 `low-relevance`，换更具体的主题。受限网络先按第 5.1 节启动本机 SearXNG（`./searxng/run.sh`），或直接用 `--seed` / `--source`。
+**Q：模式二一直返回 LA011 / LA006？**
+先看报告 `crawl.rejected`：若多为 `LA005`，说明目标站点安全策略拒绝；若为 `too-short`，多为页面正文过短；若为 `low-relevance`，换更具体的主题。`LA006` 且提示余额不足时先充值，提示搜索无结果时改用 `--seed` / `--source` 或本地文件输入。
 
-**Q：SearXNG 启动失败或返回 403？**
-- `No module named pip`：删除 `searxng/.runtime/venv` 后重跑（脚本已改用 `uv pip`）。
-- 返回 HTML 而不是 JSON：确认 `searxng/settings.yml` 的 `search.formats` 含 `json`，且用 `GET` 请求。
-- 端口冲突：`SEARXNG_PORT=8890 ./searxng/run.sh`，并设 `LA_SEARXNG_URL=http://127.0.0.1:8890`。
-- 结果为 0：本机出口被目标引擎限制时可换引擎，属于网络环境问题；`curl` 同一查询可快速判断是 SearXNG 还是 Agent 侧问题。
-
-**Q：配置了本地 SearXNG，会放开内网抓取吗？**
-不会。只对检索接口放行本机地址，正文页面仍走 `assertPublic`；`LA_ALLOW_PRIVATE_HOSTS` 保持默认 `0`。
+**Q：DeepSeek Search/Fetch 报 401 / 402？**
+`401` 表示 `DEEPSEEK_API_KEY` 无效或已失效，检查 Key 是否正确；`402` 表示账户余额不足，先到 DeepSeek 开放平台充值。两者都会直接报错，不会静默回退。
 
 **Q：PDF 提取为空？**
 扫描版 PDF 没有文本层，会告警。请把页面导出为 PNG 后用图片输入走 OCR。

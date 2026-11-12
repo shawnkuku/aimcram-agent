@@ -1,17 +1,15 @@
 /**
- * 主题抓取编排：检索 → 逐页抓取（robots/限速）→ 正文提取 → 质量筛选 → 去重。
+ * 主题抓取编排：DeepSeek 检索 → 逐页 Fetch（Markdown 正文）→ 质量筛选 → 去重。
  *
  * 设计原则：
- * - 任何单页失败都不终止整体，失败原因写入报告；
+ * - 任何单页失败都不终止整体，失败原因写入报告；检索本身失败则直接抛错（不静默回退）；
  * - 质量门槛可配置，宁缺毋滥：正文过短、主题相关性低、重复度高的页面直接丢弃；
  * - 抓取页数与深度有硬上限，避免无界爬取。
  */
 
-import { Crawler } from './fetch.mjs';
+import { DeepSeekTools } from './deepseek-tools.mjs';
 import { searchTopic } from './search.mjs';
-import { ensureLocalSearxng } from './searxng-local.mjs';
-import { extractWebSource } from '../extract/index.mjs';
-import { extractLinks } from '../extract/html.mjs';
+import { extractMarkdownSource } from '../extract/index.mjs';
 import { jaccard, shingles, keywords, textStats, isoNow } from '../util.mjs';
 import { AgentError } from '../errors.mjs';
 
@@ -78,8 +76,33 @@ export function relevance(topic, text, title = '') {
   return strongHit ? hit / total : 0;
 }
 
-function contextualLinks(html, url, topic, limit) {
-  const links = extractLinks(html, url, { sameHostOnly: true, limit: 80 });
+const MD_LINK = /\[[^\]]*\]\(([^)\s]+)[^)]*\)/g;
+const BINARY_EXT = /\.(?:pdf|zip|rar|7z|exe|dmg|mp4|mp3|png|jpe?g|gif|svg|webp|docx?|xlsx?|pptx?)$/i;
+
+/** 从 Markdown 正文提取 `[label](url)` 链接，按主题二元组打分取前 limit 个。 */
+function contextualLinks(markdown, finalUrl, topic, limit, { sameHostOnly = true } = {}) {
+  const base = new URL(finalUrl);
+  const seen = new Set();
+  const links = [];
+  for (const m of String(markdown || '').matchAll(MD_LINK)) {
+    const href = m[1];
+    if (/^(#|javascript:|mailto:|tel:)/i.test(href)) continue;
+    let abs;
+    try {
+      abs = new URL(href, base);
+    } catch {
+      continue;
+    }
+    if (!/^https?:$/.test(abs.protocol)) continue;
+    if (BINARY_EXT.test(abs.pathname)) continue;
+    if (sameHostOnly && abs.hostname !== base.hostname) continue;
+    abs.hash = '';
+    const url = abs.toString();
+    if (seen.has(url)) continue;
+    seen.add(url);
+    const label = m[0].slice(1, m[0].indexOf(']')).replace(/\s+/g, ' ').trim();
+    links.push({ url, label });
+  }
   const grams = topicBigrams(topic).map((g) => g.toLowerCase());
   return links
     .map((l) => {
@@ -95,11 +118,11 @@ function contextualLinks(html, url, topic, limit) {
 /**
  * @param {string} topic
  * @param {import('../config.mjs').DEFAULTS} config
- * @param {{reporter?: any, seeds?: string[], maxPages?: number, depth?: number, searchProvider?: string}} [opts]
+ * @param {{reporter?: any, seeds?: string[], maxPages?: number, depth?: number, tools?: DeepSeekTools}} [opts]
  */
 export async function crawlTopic(topic, config, opts = {}) {
   const reporter = opts.reporter;
-  const crawler = new Crawler(config);
+  const tools = opts.tools || new DeepSeekTools(config);
   const maxPages = opts.maxPages || config.maxPages;
   const depth = opts.depth ?? config.maxDepth;
   const seeds = (opts.seeds || []).filter(Boolean);
@@ -107,17 +130,9 @@ export async function crawlTopic(topic, config, opts = {}) {
   let candidates = seeds.map((url) => ({ url, title: '', snippet: '', provider: 'seed' }));
   let searchReport = { provider: 'seed', attempts: [], count: candidates.length };
 
-  let searxng = null;
   if (!candidates.length) {
-    const provider = String(opts.searchProvider || config.searchProvider || '');
-    if (provider.includes('searxng')) {
-      searxng = await ensureLocalSearxng(config.searxngUrl, {
-        autoStart: config.autoStartSearxng,
-        onNote: (message) => (reporter?.info ? reporter.info(message) : reporter?.warn?.(message))
-      });
-    }
     reporter?.stage('crawl', 4, '检索候选页面…');
-    const found = await searchTopic(topic, crawler, { provider: opts.searchProvider, limit: maxPages * 2 });
+    const found = await searchTopic(topic, tools, { limit: maxPages * 2 });
     candidates = found.results;
     searchReport = { provider: found.provider, attempts: found.attempts, count: found.results.length };
   }
@@ -139,22 +154,20 @@ export async function crawlTopic(topic, config, opts = {}) {
 
     let page;
     try {
-      page = await crawler.fetchPage(url);
+      page = await tools.fetchPage(url);
     } catch (err) {
       rejected.push({ url, reason: err.code || 'LA006', message: err.message });
       if (err.code === 'LA005') {
-        reporter?.warn(`跳过（合规限制）：${url} · ${err.message}`);
+        reporter?.warn(`跳过（站点策略拒绝）：${url} · ${err.message}`);
       }
       continue;
     }
 
-    const source = extractWebSource({
+    const source = extractMarkdownSource({
       url,
       finalUrl: page.finalUrl,
-      html: page.html,
-      title: item.title,
-      status: page.status,
-      bytes: page.bytes,
+      markdown: page.markdown,
+      title: page.title || item.title,
       fetchedAt: isoNow()
     });
     source.id = `web-${accepted.length + 1}`;
@@ -189,7 +202,7 @@ export async function crawlTopic(topic, config, opts = {}) {
       `已采纳 ${accepted.length} 篇 · ${source.title.slice(0, 24)}`);
 
     if (depth > 0 && item.depth < depth && accepted.length < maxPages) {
-      const links = contextualLinks(page.html, page.finalUrl, topic, 3);
+      const links = contextualLinks(page.markdown, page.finalUrl, topic, 3, { sameHostOnly: config.sameHostOnly });
       for (const link of links) {
         if (seenUrls.has(link.url)) continue;
         queue.push({ url: link.url, title: link.label, depth: item.depth + 1, provider: searchReport.provider });
@@ -199,28 +212,21 @@ export async function crawlTopic(topic, config, opts = {}) {
 
   if (!accepted.length) {
     throw new AgentError('LA011', '抓取完成但没有可用内容', {
-      hint: '换用更具体的主题、配置 SearXNG，或直接提供本地文件 / URL 输入源',
+      hint: '换用更具体的主题，或直接提供本地文件 / URL 输入源',
       details: { rejected: rejected.slice(0, 10), search: searchReport }
     });
   }
 
   return {
     sources: accepted,
-    crawler,
+    tools,
     report: {
       topic,
       search: searchReport,
-      searxng,
       requested: candidates.length,
       accepted: accepted.length,
       rejected,
-      robotsBlocked: crawler.stats.robotsBlocked,
-      privateBlocked: crawler.stats.privateBlocked,
-      requests: crawler.stats.requests,
-      bytes: crawler.stats.bytes,
-      hosts: [...crawler.stats.hosts],
-      userAgent: config.userAgent,
-      rateLimitMs: config.rateLimitMs
+      tools: { ...tools.stats }
     }
   };
 }

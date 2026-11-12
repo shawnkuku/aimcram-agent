@@ -21,7 +21,6 @@
     "cheerio": "^1.2.0",
     "jsdom": "^27.0.0",
     "mammoth": "^1.13.0",
-    "pdfjs-dist": "^6.4.299",
-    "robots-parser": "^3.0.1"
+    "pdfjs-dist": "^6.4.299"
   }
 }

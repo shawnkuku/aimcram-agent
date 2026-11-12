@@ -2,7 +2,7 @@
  * 三模式流水线
  *
  * 模式一 sources：用户给定本地文档 / 图片 / 网页链接 → 提取 → 生成 → 组包
- * 模式二 web：只给主题 → 合规检索 + 抓取 → 去重筛选 → 生成 → 组包
+ * 模式二 web：只给主题 → DeepSeek 检索 + 抓取 → 去重筛选 → 生成 → 组包
  * 模式三 combined：本地/指定源 + 自主抓取，合并后生成
  *
  * 所有模式共用同一套 Source 模型、同一套生成器与同一个 kshare-pack/v1 产物。
@@ -14,9 +14,9 @@ import { AgentError } from './errors.mjs';
 import { resolveConfig, VERSION } from './config.mjs';
 import { createLLM } from './llm.mjs';
 import { MockLLM } from './mock.mjs';
-import { Crawler } from './web/fetch.mjs';
+import { DeepSeekTools } from './web/deepseek-tools.mjs';
 import { crawlTopic } from './web/crawl.mjs';
-import { extractFile, extractInlineText, extractWebSource } from './extract/index.mjs';
+import { extractFile, extractInlineText, extractMarkdownSource } from './extract/index.mjs';
 import { generateStudyLibrary, generateOutlineRaw, normalizePresetOutline } from './generate.mjs';
 import { suggestDepth } from './interactive.mjs';
 import { buildPack, verifyPack } from './pack.mjs';
@@ -77,7 +77,9 @@ export async function runPipeline(params = {}) {
 
   const sources = [];
   const notes = [];
-  const crawler = new Crawler(config);
+  // 联网搜索 / 网页抓取统一走 DeepSeek Search/Fetch；只在真正需要时才构造（无 Key 抛 LA007）
+  let tools = params.tools || null;
+  const getTools = () => (tools ||= new DeepSeekTools(config));
 
   /* ---------------------------- 1. 输入源解析 ---------------------------- */
   if (inputs.length) {
@@ -88,14 +90,12 @@ export async function runPipeline(params = {}) {
       try {
         let source;
         if (isUrl(input)) {
-          const page = await crawler.fetchPage(input);
-          source = extractWebSource({
+          const page = await getTools().fetchPage(input);
+          source = extractMarkdownSource({
             url: input,
             finalUrl: page.finalUrl,
-            html: page.html,
-            title: '',
-            status: page.status,
-            bytes: page.bytes,
+            markdown: page.markdown,
+            title: page.title,
             fetchedAt: isoNow()
           });
         } else if (input === '@clipboard') {
@@ -134,7 +134,7 @@ export async function runPipeline(params = {}) {
         reporter,
         seeds,
         maxPages: config.maxPages,
-        searchProvider: params.searchProvider
+        tools: getTools()
       });
       crawlReport = crawled.report;
       for (const s of crawled.sources) sources.push(s);

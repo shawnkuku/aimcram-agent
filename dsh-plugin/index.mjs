@@ -47,7 +47,7 @@ export const permissions = [
   { capability: 'llm:use', service: 'llm', description: '复用 Harness 当前会话所选模型生成大纲与题目' },
   { capability: 'fs:read', service: 'workingDirectory', description: '读取用户指定的本地文档 / 图片' },
   { capability: 'fs:write', service: 'workingDirectory', description: '写出学习库包、报告与 App 运行数据' },
-  { capability: 'web:fetch', service: 'web', description: '模式二/三合规检索与抓取（受 robots 限制）' },
+  { capability: 'web:fetch', service: 'web', description: '模式二/三联网检索与抓取（DeepSeek Search/Fetch API，按次计费）' },
   { capability: 'approval:ask', service: 'approval', description: '生成与打包动作要求一次性用户授权' },
   { capability: 'interact:ask', service: 'userQuestions', description: '向导式建设时向用户提问（大纲确认）' }
 ];
@@ -223,7 +223,7 @@ const generate = {
   name: 'study_library_generate',
   description:
     '生成可直接导入 AimCram 的学习库包（kshare-pack/v1）。三种模式：sources=用户指定的本地文档/图片/网页；'
-    + 'web=仅给主题，合规检索抓取；combined=两者结合。默认复用 Harness 当前所选模型生成，无需另配 API Key；'
+    + 'web=仅给主题，经 DeepSeek Search/Fetch 联网检索抓取；combined=两者结合。默认复用 Harness 当前所选模型生成；'
     + '返回包目录、ZIP、报告路径与规模统计。',
   parameters: {
     type: 'object',
@@ -252,7 +252,6 @@ const generate = {
       author: { type: 'string' },
       tags: { type: 'array', items: { type: 'string' } },
       mock: { type: 'boolean', description: '离线确定性生成（不调用 DeepSeek）' },
-      searchProvider: { type: 'string', description: 'auto/wikipedia/duckduckgo/searxng/custom' },
       emitAppDir: { type: 'string', description: '同时输出 data.js / kb.js 的目录' },
       force: { type: 'boolean', description: '覆盖同 slug+version 的已有产物' }
     },
@@ -283,14 +282,12 @@ const generate = {
           outDir,
           maxPages: args.pages,
           maxDepth: args.depth,
-          questionsPerSection: args.perSection,
-          searchProvider: args.searchProvider
+          questionsPerSection: args.perSection
         }),
         reporter,
         mock: args.mock,
         outDir,
         emitAppDir,
-        searchProvider: args.searchProvider,
         force: Boolean(args.force),
         meta: {
           slug: args.slug,
@@ -324,10 +321,8 @@ const generate = {
           ? {
               accepted: result.crawl.accepted,
               rejected: result.crawl.rejected?.length ?? 0,
-              robotsBlocked: result.crawl.robotsBlocked,
-              requests: result.crawl.requests,
-              userAgent: result.crawl.userAgent,
-              rateLimitMs: result.crawl.rateLimitMs
+              search: result.crawl.search?.provider,
+              tools: result.crawl.tools
             }
           : null,
         verification: {
@@ -467,7 +462,7 @@ const verify = {
 
 const doctor = {
   name: 'study_library_doctor',
-  description: '检查学习库生成环境：Node 版本、解析依赖、OCR 引擎、DeepSeek 配置与抓取合规参数。',
+  description: '检查学习库生成环境：Node 版本、解析依赖、OCR 引擎、DeepSeek 配置与抓取参数。',
   parameters: { type: 'object', properties: {}, additionalProperties: false },
   output: {
     schema: OUTPUT_SCHEMA,
@@ -476,7 +471,7 @@ const doctor = {
   async execute() {
     const config = resolveConfig({});
     const deps = {};
-    for (const dep of ['cheerio', 'jsdom', '@mozilla/readability', 'robots-parser', 'pdfjs-dist', 'mammoth']) {
+    for (const dep of ['cheerio', 'jsdom', '@mozilla/readability', 'pdfjs-dist', 'mammoth']) {
       try {
         await import(dep === 'pdfjs-dist' ? 'pdfjs-dist/legacy/build/pdf.mjs' : dep);
         deps[dep] = true;
@@ -505,12 +500,11 @@ const doctor = {
         };
       })(),
       crawl: {
-        userAgent: config.userAgent,
-        rateLimitMs: config.rateLimitMs,
-        searchProvider: config.searchProvider,
+        provider: 'deepseek',
         maxPages: config.maxPages,
         maxDepth: config.maxDepth,
-        maxBytes: config.maxBytes
+        maxBytes: config.maxBytes,
+        crawlTimeoutMs: config.crawlTimeoutMs
       },
       harness: harnessServices(),
       permissions

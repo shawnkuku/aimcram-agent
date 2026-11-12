@@ -12,7 +12,7 @@
 | 图片 OCR | macOS Vision（`swiftc` 编译缓存，中英双语）+ tesseract 兜底 |
 | 网页正文提取 | `@mozilla/readability` 主路径 + 容器打分兜底，剥离导航 / 广告 / 页脚 |
 | 知识图谱关联 | `## 知识图谱` 板块：知识点、高频考点、图解、关联章节 |
-| 合规抓取 | robots.txt（含 Crawl-delay）、UA 标识、同主机串行限速、超时 / 体积上限、内网拒绝、重定向逐跳校验 |
+| 联网搜索与抓取 | 统一走 DeepSeek 官方 Search/Fetch API（需 `DEEPSEEK_API_KEY`，按次计费），正文为 Markdown，失败直接报错不回退 |
 | 输出规范 | `kshare-pack/v1`：manifest + content/library.json + resources/ + source/，指纹 SHA-256 |
 | 进度反馈 | 统一事件模型，文本进度条 / `--json-progress` NDJSON / DSH 工具实时 stderr |
 | 异常处理 | `LA001`–`LA015` 错误目录，带 hint 与 details |
@@ -20,7 +20,7 @@
 三种生成模式：
 
 - **模式一 `sources`**：用户指定本地文档 / 图片 / 网页链接，只做提取与整理。
-- **模式二 `web`**：只给主题，自主检索 + 合规抓取 + 去重 + 质量筛选。
+- **模式二 `web`**：只给主题，经 DeepSeek 联网检索 + 抓取 + 去重 + 质量筛选。
 - **模式三 `combined`**：模式一 + 模式二，指定源与自主抓取合并生成（`--with-web` 等价）。
 
 ## 2. 目录结构
@@ -38,7 +38,7 @@ services/aimcram-agent/
 │   ├── config.mjs             # 环境变量与默认值
 │   ├── errors.mjs             # LA001–LA015 错误目录
 │   ├── extract/               # md/txt/html/pdf/docx/image 提取
-│   ├── web/                   # 合规抓取、检索 provider、主题抓取编排
+│   ├── web/                   # DeepSeek Search/Fetch 客户端、主题检索与抓取编排
 │   ├── llm.mjs                # DeepSeek 直连客户端（CLI / 无 Harness 环境）
 │   ├── llm-harness.mjs        # 复用 Harness 的模型与凭据（插件内首选）
 │   ├── mock.mjs               # 离线确定性生成
@@ -63,7 +63,7 @@ npm install
 - Linux：需安装 `tesseract` 与中文语言包（`tesseract-ocr-chi-sim`）作为 OCR 后端。
 - PDF 依赖 `pdfjs-dist` 文本层；扫描件请先导出为图片走 OCR。
 
-配置 DeepSeek（不配置时可加 `--mock` 离线跑通全链路）：
+配置 DeepSeek（不配置时可加 `--mock` 离线跑通全链路；联网搜索与网页抓取同样需要该 Key）：
 
 ```bash
 export DEEPSEEK_API_KEY=sk-...
@@ -76,41 +76,13 @@ export DEEPSEEK_MODEL=deepseek-chat
 
 | 环境变量 | 默认值 | 说明 |
 |---|---|---|
-| `LA_RATE_LIMIT_MS` | `1500` | 同主机最小请求间隔 |
+| `LA_CRAWL_TIMEOUT_MS` | `20000` | 单次搜索 / 抓取请求超时 |
 | `LA_MAX_PAGES` | `8` | 单次最多抓取页数 |
 | `LA_MAX_DEPTH` | `1` | 站内跟进深度 |
 | `LA_MIN_CONTENT_CHARS` | `400` | 有效内容下限 |
 | `LA_MAX_BYTES` | `5242880` | 单页响应体上限 |
-| `LA_USER_AGENT` | `AimCramAgent/1.0.0 (+https://aimcram.example/bot; …)` | 抓取 UA，请改成真实联系方式 |
-| `LA_SEARCH_PROVIDER` | `searxng` | `auto` / `wikipedia` / `duckduckgo` / `searxng` / `custom`；无本地实例时可改回 `duckduckgo` |
-| `LA_SEARXNG_URL` | `http://127.0.0.1:8888` | 本地 / 自建 SearXNG 地址（推荐） |
-| `LA_SEARXNG_AUTOSTART` | `1` | 本机 SearXNG 未运行时自动执行 `searxng/run.sh`；设 `0` 关闭 |
-| `LA_SEARCH_ENDPOINT` | 空 | 自定义检索网关，支持 `{query}` 占位符 |
-| `LA_ALLOW_PRIVATE_HOSTS` | `0` | 设为 `1` 才允许内网地址（仅本地调试） |
+| `LA_SAME_HOST_ONLY` | `1` | 深挖链接仅限同主机，设 `0` 关闭 |
 | `LA_OUT_DIR` | `./out` | 产物目录 |
-
-### 3.1 本地 SearXNG（解决检索反爬）
-
-默认检索源在部分网络环境会被反爬。仓库内置一键脚本，在本机 `127.0.0.1:8888` 起一个只供 Agent 使用的 SearXNG：
-
-```bash
-./searxng/run.sh
-```
-
-模式二 / 三在检索前会先探活：**本机地址且端口拒绝连接时自动执行上面的脚本并等待就绪**（默认最多 120 秒），已运行则直接复用。端口上已有别的服务时不会接管，远端地址永不启动；`LA_SEARXNG_AUTOSTART=0` 可关闭自动启动，恢复手动模式。
-
-首次运行会浅克隆 SearXNG、用 `uv` 创建 Python 3.12 虚拟环境并安装依赖、生成随机 `secret_key`，之后直接启动（前台运行，Ctrl+C 停止）。配置见 [searxng/settings.yml](searxng/settings.yml)：仅监听本机、关闭 limiter、开启 `format=json`、允许 GET、不使用 valkey。
-
-验证并启用：
-
-```bash
-curl 'http://127.0.0.1:8888/search?q=系统架构&format=json'
-node cli.mjs generate --topic 系统架构设计 --search searxng --pages 6
-```
-
-- 运行时文件在 `searxng/.runtime/`（已 gitignore），删除即可重装。
-- 只对**检索接口**放行本机地址；页面正文仍按公网规则校验，不会因为配了本地检索就放开内网抓取。
-- 换端口：`SEARXNG_PORT=8890 ./searxng/run.sh`，并设置 `LA_SEARXNG_URL=http://127.0.0.1:8890`。
 
 ## 4. 快速开始
 
@@ -126,8 +98,8 @@ node cli.mjs generate --topic 系统架构设计 \
 node cli.mjs generate --topic 网络体系结构 \
   --source ./notes.pdf,./osi.png,https://example.com/osi
 
-# 模式二：只给主题（推荐先启动本地 SearXNG：./searxng/run.sh）
-node cli.mjs generate --topic "系统架构设计" --search searxng --pages 6
+# 模式二：只给主题（联网搜索由 DeepSeek Search/Fetch 提供，需 DEEPSEEK_API_KEY，按次计费）
+node cli.mjs generate --topic "系统架构设计" --pages 6
 
 # 模式三：本地资料 + 自主补充
 node cli.mjs generate --topic "数据库系统" --source ./db.md --mode combined --pages 4
@@ -219,7 +191,7 @@ npx -y @deepseek-ai/dsh --profile headless \
 ## 6. 质量与测试
 
 ```bash
-npm test          # 71 项测试：提取 / 抓取合规 / 组包校验 / 三模式流水线 / 大纲结构 / 长资料重试 / 合集 / CLI / DSH 插件
+npm test          # 测试：提取 / DeepSeek 检索抓取 / 组包校验 / 三模式流水线 / 大纲结构 / 长资料重试 / 合集 / CLI / DSH 插件
 node cli.mjs eval # 提取质量评测（字符 bigram F1）
 ```
 
@@ -256,17 +228,15 @@ Markdown 100.0%  纯文本 100.0%  HTML 97.8%  DOCX 100.0%  PDF 100.0%  OCR 100.
 
 ## 7. 合规边界
 
-- 抓取前读取并遵守 `robots.txt`；robots 返回 5xx 或读取失败时**保守禁止**。
-- 同主机串行 + 最小间隔（取 `LA_RATE_LIMIT_MS` 与 `Crawl-delay` 较大者），UA 带用途与联系方式。
-- 默认拒绝 localhost、内网、链路本地地址；重定向逐跳重新校验，禁止 URL 携带账号密码。
-- 只抓取 `text/html` / `text/plain` / `+xml`，有超时、响应体上限与重定向上限。
+- 联网搜索与网页抓取统一走 DeepSeek 官方 Search/Fetch API，不做本地直连抓取；目标站点拒绝时返回 `LA005` 并跳过。
+- 单次抓取有页数、深度与响应体上限（`LA_MAX_PAGES` / `LA_MAX_DEPTH` / `LA_MAX_BYTES`），避免无界爬取。
 - 不抓取需要登录、付费墙或明确声明禁止的资源；不绕过任何访问控制。
 - 请遵守《网络安全法》《数据安全法》及目标站点条款，生成内容的使用范围由 `manifest.rights` / `license` 标注。
 
 ## 8. 已知限制
 
-- 默认检索 provider（DuckDuckGo / Wikipedia）在部分网络环境会被反爬或不可达；生产建议自建 SearXNG，或直接提供 `--source` / `--seed`。
-- 模式二依赖搜索结果质量；无结果时返回 `LA011` 并列出被拒页面原因。
+- 联网搜索与抓取由 DeepSeek Search/Fetch 提供，需 `DEEPSEEK_API_KEY` 且按次计费；余额不足（402）或 Key 无效（401）会直接报错，可改用 `--source` / `--seed` 或本地文件。
+- 模式二依赖搜索结果质量；无结果时返回 `LA006`，抓不到可用内容时返回 `LA011` 并列出被拒页面原因。
 - 扫描版 PDF 只做文本层检测并告警，需先导出图片走 OCR。
 - OCR 质量受图片分辨率影响，`coverage.lowConfidence` 会列出低置信度来源。
 

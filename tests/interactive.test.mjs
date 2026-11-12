@@ -21,7 +21,7 @@ function writeNotes(dir, name = 'notes.md') {
 }
 
 function baseConfig(overrides = {}) {
-  return { rateLimitMs: 5, crawlTimeoutMs: 5000, maxPages: 3, maxDepth: 0, minContentChars: 150, ...overrides };
+  return { crawlTimeoutMs: 5000, maxPages: 3, maxDepth: 0, minContentChars: 150, ...overrides };
 }
 
 test('outlinePreview：压成轻量预览层，不泄漏内部结构', () => {

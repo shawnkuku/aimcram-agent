@@ -162,24 +162,13 @@ export function extractInlineText(value, opts = {}) {
   });
 }
 
-/** 已抓取网页 → Source。 */
-export function extractWebSource({ id, url, finalUrl, html, title, fetchedAt, status, bytes }) {
-  const r = extractArticle(html, { url: finalUrl || url, fallbackTitle: title || '' });
+/** DeepSeek Fetch 返回的 Markdown 正文 → Source。 */
+export function extractMarkdownSource({ id, url, finalUrl, markdown, title, fetchedAt }) {
+  const text = String(markdown || '').replace(/^\uFEFF/, '').trim(); // 去 BOM
   return buildSource({
-    id, kind: 'url', type: 'html', title: r.title || title || url, text: r.text, url: finalUrl || url,
-    meta: {
-      ext: '.html',
-      bytes,
-      method: r.method,
-      status,
-      fetchedAt,
-      siteName: r.siteName,
-      byline: r.byline,
-      publishedTime: r.publishedTime,
-      excerpt: r.excerpt,
-      language: r.language
-    },
-    quality: { mode: 'heuristic', confidence: null }, warnings: r.warnings
+    id, kind: 'url', type: 'markdown', title: title || url, text, url: finalUrl || url,
+    meta: { ext: '.md', method: 'deepseek-fetch', status: 200, fetchedAt },
+    quality: { mode: 'heuristic', confidence: null }
   });
 }
 

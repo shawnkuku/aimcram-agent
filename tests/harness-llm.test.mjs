@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HarnessLLM } from '../src/llm-harness.mjs';
-import { ensureLocalSearxng } from '../src/web/searxng-local.mjs';
 
 /** 伪 Harness llm 服务：按预设 chunk 序列流式返回。 */
 function fakeLlm(chunks) {
@@ -138,10 +137,3 @@ test('HarnessLLM：缺少 provider/model 直接拒绝', () => {
   assert.throws(() => new HarnessLLM({ llm: null, provider: 'deepseek', model: 'x' }), (err) => err.code === 'LA012');
 });
 
-test('本地 SearXNG：远端地址不接管、关闭开关时不启动', async () => {
-  const remote = await ensureLocalSearxng('https://searx.example.com');
-  assert.equal(remote.state, 'external');
-
-  const skipped = await ensureLocalSearxng('http://127.0.0.1:9', { autoStart: false });
-  assert.equal(skipped.state, 'skipped');
-});
