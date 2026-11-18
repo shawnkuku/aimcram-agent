@@ -18,6 +18,7 @@ import { DeepSeekTools } from './web/deepseek-tools.mjs';
 import { crawlTopic } from './web/crawl.mjs';
 import { extractFile, extractInlineText, extractMarkdownSource } from './extract/index.mjs';
 import { generateStudyLibrary, generateOutlineRaw, normalizePresetOutline } from './generate.mjs';
+import { importLibrary } from './import.mjs';
 import { suggestDepth } from './interactive.mjs';
 import { buildPack, verifyPack } from './pack.mjs';
 import { emitAppData } from './exports.mjs';
@@ -32,8 +33,8 @@ function isUrl(value) {
 
 function resolveMode(mode, hasInputs) {
   if (mode === 'auto') return hasInputs ? 'sources' : 'web';
-  if (!['sources', 'web', 'combined'].includes(mode)) {
-    throw new AgentError('LA012', `未知模式：${mode}`, { hint: '可选 auto / sources / web / combined' });
+  if (!['sources', 'web', 'combined', 'import'].includes(mode)) {
+    throw new AgentError('LA012', `未知模式：${mode}`, { hint: '可选 auto / sources / web / combined / import' });
   }
   return mode;
 }
@@ -67,6 +68,9 @@ export async function runPipeline(params = {}) {
   let mode = resolveMode(params.mode || 'auto', inputs.length > 0);
   if (mode === 'sources' && !inputs.length) {
     throw new AgentError('LA001', '模式一需要至少一个输入源', { hint: '--source 文件路径 / 图片 / URL，可重复或逗号分隔' });
+  }
+  if (mode === 'import' && !inputs.length) {
+    throw new AgentError('LA001', '题库直采需要至少一个 JSONL / JSON 文件');
   }
   if (mode === 'web' && !topic && !seeds.length) {
     throw new AgentError('LA001', '模式二需要指定学习主题', { hint: '--topic 例如「系统架构设计」' });
@@ -171,7 +175,8 @@ export async function runPipeline(params = {}) {
   sources.push(...deduped);
 
   const totalChars = sources.reduce((n, s) => n + textStats(s.text).meaningful, 0);
-  if (!sources.length || totalChars < config.minContentChars) {
+  /* 直采按题量判断有效性，不受正文字数下限限制 */
+  if (mode !== 'import' && (!sources.length || totalChars < config.minContentChars)) {
     let proceed = false;
     if (typeof params.interact?.askInsufficient === 'function') {
       reporter?.stage('dedupe', 38, '有效内容不足，等待用户决策');
@@ -213,7 +218,17 @@ export async function runPipeline(params = {}) {
   const useMock = Boolean(params.mock);
   let llm = params.llm;
   if (!llm) {
-    if (useMock) {
+    if (mode === 'import') {
+      /* 直采不强制调用模型；有 Key 时用于题量不足的补题 */
+      llm = { name: 'aimcram-agent/import', stats: {} };
+      if (!useMock && config.apiKey) {
+        try {
+          llm = createLLM(config);
+        } catch {
+          /* Key 异常时退回纯直采 */
+        }
+      }
+    } else if (useMock) {
       llm = new MockLLM({ sources, topic, config });
     } else {
       llm = createLLM(config);
@@ -257,7 +272,9 @@ export async function runPipeline(params = {}) {
   let questionCount = Number(params.questionCount) || 0;
   let caseCount = Number(params.caseCount) || 0;
   const confirmOutline = params.interact?.confirmOutline || params.outlineHook;
-  if (params.presetOutline && typeof params.presetOutline === 'object') {
+  if (mode === 'import') {
+    /* 直采模式不需要大纲确认，按源题库原样导入 */
+  } else if (params.presetOutline && typeof params.presetOutline === 'object') {
     /* App 里已经有用户确认过的目录：直接沿用，不再让模型重新拆分章节 */
     outline = normalizePresetOutline(params.presetOutline, { topic });
     outlineQuality = { outlinePreset: true };
@@ -286,20 +303,33 @@ export async function runPipeline(params = {}) {
     outlineQuality = pre.quality;
   }
 
-  const generated = await generateStudyLibrary({
-    topic,
-    sources,
-    llm,
-    config,
-    reporter,
-    meta,
-    outline,
-    outlineQuality,
-    questionsPerSectionOverride,
-    questionCount,
-    caseCount,
-    chapterHook: params.interact?.confirmChapter
-  });
+  const generated = mode === 'import'
+    ? await importLibrary({
+      topic,
+      sources,
+      workDir,
+      meta,
+      reporter,
+      questionCount,
+      questionsPerSection: questionsPerSectionOverride ?? config.questionsPerSection,
+      caseCount,
+      llm,
+      config
+    })
+    : await generateStudyLibrary({
+      topic,
+      sources,
+      llm,
+      config,
+      reporter,
+      meta,
+      outline,
+      outlineQuality,
+      questionsPerSectionOverride,
+      questionCount,
+      caseCount,
+      chapterHook: params.interact?.confirmChapter
+    });
 
   // manifest 与 content/meta 必须同源：显式参数已在渲染前覆盖 outline，
   // 这里只做回读，不再二次覆盖，否则 strict 校验会报 E112。
@@ -321,7 +351,7 @@ export async function runPipeline(params = {}) {
   });
 
   reporter?.stage('verify', 92, '校验学习库包');
-  const verification = verifyPack(built.zip, { strict: true, appVersion: config.minAppVersion });
+  const verification = verifyPack(built.zip, { strict: mode !== 'import', appVersion: config.minAppVersion });
 
   const report = {
     ok: verification.ok,

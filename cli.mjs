@@ -51,7 +51,7 @@ generate 选项：
   --topic <主题>              学习主题（模式一可省略，自动取首个来源标题）
   --source <列表>             输入源：本地文件 / 图片 / URL / text:... / @clipboard
                               可重复，也可用逗号分隔
-  --mode <auto|sources|web|combined>
+  --mode <auto|sources|web|combined|import>
                               auto：有输入源走模式一，否则模式二；combined 为模式三
   --seed <URL>                模式二 / 三的种子页面（可重复）
   --with-web                  模式一同时做自主抓取（等价于 --mode combined）
@@ -83,6 +83,10 @@ generate 选项：
 
   # 模式三：本地资料 + 自主补充
   node cli.mjs generate --topic "数据库系统" --source ./db.md --mode combined --pages 4
+
+  # 题库直采：结构化题库（JSONL/JSON/CSV）与 PDF/Word/Excel 资料都能导入
+  # 规则认不出的部分会用模型兜底解析（需 DEEPSEEK_API_KEY）
+  node cli.mjs generate --topic "驾考科目一" --source ./驾考题库.jsonl --mode import --out ./out
 
   # 离线跑通全链路
   node cli.mjs generate --topic 示例主题 --source ./samples/architecture-notes.md --mock --out ./out

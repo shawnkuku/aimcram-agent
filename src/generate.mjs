@@ -758,7 +758,7 @@ export function finalizeQuestionCounts(outline, targetByKey, quality, { exact = 
   return outline;
 }
 
-function sourceDigest(sources, maxChars) {
+export function sourceDigest(sources, maxChars) {
   const perSource = Math.max(2000, Math.floor(maxChars / Math.max(1, sources.length)));
   return sources.map((s) => ({
     title: s.title,
@@ -894,8 +894,7 @@ export async function generateKnowledgeGraph({ llm, outline, digest, reporter, q
   return plates.length ? plates : buildOutlinePlates(outline.chapters, { max: 10 });
 }
 
-/** 把已生成的题目与案例折算成「考试重点」信号，供知识图谱排定考点优先级。 */
-function buildExamFocus(outline) {
+export function buildExamFocus(outline) {
   return outline.chapters.map((ch) => {
     const freq = new Map();
     let questions = 0;
@@ -918,8 +917,7 @@ function buildExamFocus(outline) {
   });
 }
 
-/** 知识图谱生成后，把之前留空的案例按章回填到对应板块。 */
-function backfillCaseCategories(outline) {
+export function backfillCaseCategories(outline) {
   const plateNames = (outline.plates || []).map((p) => p.name);
   const pairs = [];
   for (const plate of outline.plates || []) {
@@ -1619,6 +1617,8 @@ export function renderLibraryMarkdown({ meta, outline }) {
   lines.push('');
   lines.push(`# ${outline.title}`);
   lines.push('');
+  /* 直采模式没有知识图谱，跳过整个区块，避免空标题触发 kshare 警告 */
+  if (outline.plates.length) {
   lines.push('## 知识图谱');
   lines.push('');
   for (const plate of outline.plates) {
@@ -1639,6 +1639,7 @@ export function renderLibraryMarkdown({ meta, outline }) {
     }
     lines.push(`- 关联章节：${plate.chapters.join(', ')}`);
     lines.push('');
+  }
   }
 
   const typeLabel = { single: '单选', multiple: '多选', judge: '判断' };
@@ -1813,7 +1814,7 @@ export function renderFigureSvg(figure) {
  * 把题目/案例里的 figure 落盘为 images/*.svg：
  * 题目图拼进题干（Markdown 图片，随 kshare 内联），案例图写入「图解」字段。
  */
-function attachFigures(outline, imagesDir) {
+export function attachFigures(outline, imagesDir) {
   const files = [];
   outline.chapters.forEach((ch, ci) => {
     ch.sections.forEach((sec, si) => {

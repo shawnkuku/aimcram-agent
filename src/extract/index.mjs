@@ -19,6 +19,7 @@ import { textStats, safeBaseName } from '../util.mjs';
 import { extractText } from './text.mjs';
 import { extractPdf } from './pdf.mjs';
 import { extractDocx } from './docx.mjs';
+import { extractXlsx } from './xlsx.mjs';
 import { extractImage, guessImageMime } from './image.mjs';
 import { extractArticle } from './html.mjs';
 
@@ -46,6 +47,10 @@ export function detectType(file, buffer) {
   const ext = path.extname(file || '').toLowerCase();
   const magicType = magic(buffer);
   if (magicType === 'pdf') return 'pdf';
+  if (ext === '.xlsx') return 'xlsx';
+  if (ext === '.xls') {
+    throw new AgentError('LA002', '这是旧版 .xls 二进制格式', { hint: '请在 Excel 里另存为 .xlsx 后重试' });
+  }
   if (magicType === 'zip') return 'docx';
   if (['png', 'jpeg', 'gif', 'webp', 'bmp'].includes(magicType)) return 'image';
   if (magicType === 'ole') {
@@ -139,6 +144,15 @@ export async function extractFile(file, opts = {}) {
       id: opts.id, kind: 'file', type: 'docx', title: r.title, text: r.text, file: abs,
       meta: { ext: '.docx', bytes: stat.size, method: r.method },
       quality: { mode: 'lossless', confidence: 1 }, warnings: r.warnings, assets: r.assets
+    });
+  }
+
+  if (type === 'xlsx') {
+    const r = await extractXlsx(buffer, { file: abs, title: baseTitle });
+    return buildSource({
+      id: opts.id, kind: 'file', type: 'text', title: r.title, text: r.text, file: abs,
+      meta: { ext: '.xlsx', bytes: stat.size, method: 'unzip+xml', sheets: r.sheets, rows: r.rows },
+      quality: { mode: 'lossless', confidence: 1 }
     });
   }
 
