@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runPipeline } from '../src/pipeline.mjs';
 import { verifyPack } from '../src/pack.mjs';
-import { planStructure, applyOutlineMeta, isShellQuestion } from '../src/generate.mjs';
+import { planStructure, applyOutlineMeta, isShellQuestion, planSectionTargets } from '../src/generate.mjs';
 import { AgentError } from '../src/errors.mjs';
 import { HarnessLLM } from '../src/llm-harness.mjs';
 import { makeTempDir } from './helpers.mjs';
@@ -552,4 +552,21 @@ test('生成链路：首次 reasoning 耗尽预算后自动重试并完成长资
   assert.equal(result.stats.chapters, 3);
   assert.equal(result.stats.quality.sectionsFilled, 6);
   assert.equal(result.verification.ok, true, JSON.stringify(result.verification.errors));
+});
+
+test('题量按章/节考试权重分配，而不是按章节平均', () => {
+  const outline = {
+    chapters: [
+      { name: '高频章', weight: 5, sections: [{ name: '核心节', weight: 3 }, { name: '次要节', weight: 3 }] },
+      { name: '低频章', weight: 1, sections: [{ name: '边缘节', weight: 3 }] }
+    ]
+  };
+  const targets = planSectionTargets(outline, 3, 30);
+  const values = [...targets.values()];
+  assert.equal(values.reduce((a, b) => a + b, 0), 30, '总题量必须精确等于 30');
+  assert.ok(values[0] > values[2], '高频章每节题量应多于低频章');
+
+  // 未给总题量时，同样按权重缩放，不退回平均
+  const scaled = [...planSectionTargets(outline, 3).values()];
+  assert.ok(scaled[0] > scaled[2], '每节题量模式下高频章也应更多');
 });

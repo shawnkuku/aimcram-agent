@@ -22,7 +22,10 @@ import { extractDocx } from './docx.mjs';
 import { extractImage, guessImageMime } from './image.mjs';
 import { extractArticle } from './html.mjs';
 
-const TEXT_EXTS = new Set(['.md', '.markdown', '.mdx', '.txt', '.text', '.log', '.csv', '.tsv', '.json', '.yaml', '.yml']);
+const TEXT_EXTS = new Set([
+  '.md', '.markdown', '.mdx', '.txt', '.text', '.log',
+  '.csv', '.tsv', '.json', '.jsonl', '.ndjson', '.json5', '.yaml', '.yml', '.xml'
+]);
 const HTML_EXTS = new Set(['.html', '.htm', '.xhtml']);
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
 

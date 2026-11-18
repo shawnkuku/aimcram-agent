@@ -28,17 +28,16 @@ const OUTLINE_SYSTEM = `你是资深课程设计专家，负责把零散资料�
     {
       "name": "章的短名称（不要带“第N章”前缀）",
       "summary": "本章一句话概述",
+      "weight": 3,
       "sections": [
         {
           "name": "节名称（不要带编号）",
           "summary": "本节 40–80 字摘要",
+          "weight": 3,
           "points": ["**知识点名**：精简摘要（关联：另一个知识点）", "..."]
         }
       ]
     }
-  ],
-  "plates": [
-    { "name": "知识板块名", "lead": "一句话导语", "points": ["**要点**：解释"], "exam": ["高频考点"], "chapters": ["章名称"] }
   ]
 }
 硬性要求：
@@ -46,7 +45,8 @@ const OUTLINE_SYSTEM = `你是资深课程设计专家，负责把零散资料�
 2. 章节要具体、可出题：章名落到知识模块（如「传输层协议」「网络安全防护」），不要用「基础」「概述」「综合」这类空泛命名；每节聚焦一个可以独立命题的知识点，避免同一考点在多个小节重复。
 3. 内容必须来自给定资料，不编造资料中没有的事实；资料不足时合并小节而不是扩写。
 4. points 的每条不超过 90 字，不要换行。
-5. 不允许把全部内容压进 1 章；章是按主题划分的一级结构，必须相互独立。`;
+5. 不允许把全部内容压进 1 章；章是按主题划分的一级结构，必须相互独立。
+6. 每章与每节都必须给出 weight（1–5 的整数）：按该章/节在真实考试中的出题频率与知识重要程度打分，5 = 每年必考的核心，1 = 很少出现的边缘内容；不得所有章都填同一个值，权重会直接决定题量与案例的分配比例。`;
 
 const OUTLINE_TITLES_SYSTEM = `你是课程设计专家。只输出合法 JSON，不要解释、不要代码围栏。
 JSON 结构：{ "chapters": ["章名1", "章名2", "章名3"] }
@@ -83,7 +83,10 @@ const QUESTION_SYSTEM = `你是命题专家，基于给定章节知识点出题�
           "options": ["选项A原文","选项B原文","选项C原文","选项D原文"],
           "answer": ["A","C"], "analysis": "解析", "difficulty": "易|中|难", "tags": ["知识点"] },
         { "type": "judge", "stem": "一句可判定真假的具体陈述", "answer": ["正确"],
-          "analysis": "解析", "difficulty": "易|中|难", "tags": ["知识点"] }
+          "analysis": "解析", "difficulty": "易|中|难", "tags": ["知识点"] },
+        { "type": "single", "stem": "需要看图作答的题干", "options": ["A原文","B原文","C原文","D原文"],
+          "answer": "A", "analysis": "解析", "difficulty": "中", "tags": ["知识点"],
+          "figure": { "kind": "flow", "title": "≤20字", "items": ["步骤一", "步骤二", "步骤三"] } }
       ]
     }
   ]
@@ -95,7 +98,11 @@ const QUESTION_SYSTEM = `你是命题专家，基于给定章节知识点出题�
 4. 每个小节必须实际出满 countPerSection 道题，题目之间不得重复或换汤不换药。
 5. 禁止空壳题：题干不能是“这一表述属于本节内容”“以下说法正确的是”这类没有具体概念的句子；判断题的命题必须给出可判定真假的具体陈述。
 6. 解析必须说明为什么正确/错误，不得原样复述题干或知识点原文。
-7. 不要包含任何机构名、网校名、二维码、加群等推广信息。`;
+7. 不要包含任何机构名、网校名、二维码、加群等推广信息。
+8. 配图：只有确实依赖图才能理解的内容（流程、层级结构、拓扑、数据流、对比、表格数据）才加 figure，并让题干明确指向图；figure 必须是结构化数据，不要输出 SVG、图片链接或 base64：
+   - 流程/结构：{ "kind": "flow|layers", "title": "≤20字", "items": ["节点1","节点2","节点3"] }
+   - 表格/对比：{ "kind": "table", "title": "≤20字", "columns": ["项目","方案A","方案B"], "rows": [["指标","值1","值2"]] }
+   不依赖图的题目不要给 figure；带 figure 的题目不超过本小节题量的 30%。`;
 
 const PLATES_SYSTEM = `你是知识图谱设计专家，负责把课程大纲整理成层级完整、关联清晰的知识图谱。
 只输出合法 JSON，不要解释、不要代码围栏。JSON 结构：
@@ -119,7 +126,8 @@ const PLATES_SYSTEM = `你是知识图谱设计专家，负责把课程大纲整
    每条 points 必须用「（二级：…）」列下属子概念，并用「（关联：…）」标注与另一条知识点的关系（同板块或跨板块均可）。
 3. exam 每板块 4–6 条，必须是可直接命题的具体考点或易错点，不要只写「高频考点」四个字。
 4. chapters 必须填写本板块覆盖的章名称，取自给定 chapters，不得编造章名。
-5. 内容来自给定大纲与资料，不编造资料中没有的事实；每条 points 不超过 220 字，不换行，不含营销信息。`;
+5. 内容来自给定大纲与资料，不编造资料中没有的事实；每条 points 不超过 220 字，不换行，不含营销信息。
+6. examFocus 给出了各章的权重、已出题量、高频标签与案例，请据此排定优先级：高频考点多的章/板块排在前面，exam 中优先列这些高频考点；权重高但题目少的章要补足考点，权重低的章不要占据过多板块篇幅。`;
 
 const CASE_SYSTEM = `你是案例教学专家，负责为课程编写可直接用于案例精析的实操案例。
 只输出合法 JSON，不要解释、不要代码围栏。JSON 结构：
@@ -128,7 +136,7 @@ const CASE_SYSTEM = `你是案例教学专家，负责为课程编写可直接�
     {
       "title": "案例标题（≤30 字，点明业务/系统/制度场景）",
       "chapter": "所属章名称，必须来自给定 chapters",
-      "category": "最相关的知识板块名，必须来自给定 plates",
+      "category": "所属知识板块名；不确定时留空字符串",
       "background": "背景：交代业务、系统或制度背景，以及为什么会产生这个案例（80–160 字）",
       "scenario": "场景：给出具体数据、约束、冲突或异常现象，足以支撑分析（100–200 字）",
       "analysis": "分析过程：分 2–4 点逐步推理，说明判断依据、取舍与可能风险（180–320 字）",
@@ -136,6 +144,7 @@ const CASE_SYSTEM = `你是案例教学专家，负责为课程编写可直接�
       "quickNote": "速记：一句话答题骨架，用 → 串联关键步骤",
       "difficulty": "易|中|难",
       "tags": ["知识点1", "知识点2"],
+      "figure": { "kind": "flow", "title": "≤20字", "items": ["环节一", "环节二", "环节三"] },
       "questions": [
         { "stem": "结合材料，提出的具体问题", "answer": "分步作答，写清依据与结论", "analysis": "补充说明评分点或易错点" }
       ]
@@ -146,9 +155,10 @@ const CASE_SYSTEM = `你是案例教学专家，负责为课程编写可直接�
 1. cases 数量必须等于 caseCount，不要多给也不要少给；多条案例之间场景与考点不得重复。
 2. 每条的 background、scenario、analysis、conclusion 必须齐备且写实，禁止只写一两句话或使用「略」「见解析」。
 3. questions 给 2–3 个小问，每个小问的 answer 必须分步推理，不能只给结论。
-4. category 只能取给定 plates 中的名称；无法对应时留空字符串。
+4. category 可留空；知识图谱会在案例之后生成，届时按所在章自动归类，不要编造板块名。
 5. chapter 必须取自给定 chapters 中的章名称；一批跨多章时要按章分别对应，不能把所有案例都写在同一章。
-6. 内容必须来自给定大纲与资料，不编造资料外的事实；不要出现机构名、二维码、加群等推广信息。`;
+6. 内容必须来自给定大纲与资料，不编造资料外的事实；不要出现机构名、二维码、加群等推广信息。
+7. 案例涉及流程、结构、拓扑或数据对比时，必须用 figure 给出图示化数据（结构化 JSON，不要 SVG 或图片链接）：流程/结构用 { "kind": "flow|layers", "title": "...", "items": [...] }，对比用 { "kind": "table", "title": "...", "columns": [...], "rows": [[...]] }；纯文字论述型案例可省略 figure。`;
 
 /* 入库校验（W003）会拒绝带来源 / 推广词的文本；生成内容里这类词多为正常表述，
    统一换成中性说法，避免整份产物在最后一步校验失败 */
@@ -221,6 +231,12 @@ function cnNumber(n) {
   return String(n);
 }
 
+/** 考试权重：模型可能给数字或字符串，缺省按 3（中等频次）处理。 */
+export function examWeight(value) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) ? Math.max(1, Math.min(5, n)) : 3;
+}
+
 export function normalizeOutline(raw, { topic, config }) {
   const title = oneLine(raw?.title || topic, 60) || topic;
   const chaptersRaw = Array.isArray(raw?.chapters) ? raw.chapters : [];
@@ -240,6 +256,7 @@ export function normalizeOutline(raw, { topic, config }) {
         name,
         summary: oneLine(sec.summary, 160) || (points[0] ? truncate(points[0], 120) : `${name} 的要点。`),
         points: points.length ? points : [`**${name}**：${oneLine(sec.summary, 100) || '本节核心概念。'}（关联：综合应用）`],
+        weight: examWeight(sec.weight),
         questions: []
       });
       if (sections.length >= 6) break;
@@ -248,6 +265,7 @@ export function normalizeOutline(raw, { topic, config }) {
     chapters.push({
       name: oneLine(ch.name, 40) || `主题${chapters.length + 1}`,
       summary: oneLine(ch.summary, 160) || sections[0].summary,
+      weight: examWeight(ch.weight),
       sections
     });
     if (chapters.length >= 8) break;
@@ -267,17 +285,14 @@ export function normalizeOutline(raw, { topic, config }) {
     });
   });
 
-  const chapterNames = chapters.map((c) => c.name);
-  const plates = normalizePlates(raw?.plates, { chapterNames, max: 10 });
-  if (!plates.length) plates.push(...buildOutlinePlates(chapters, { max: 10 }));
-
+  // 知识图谱在选择题与案例精析之后单独生成，这里不再提前产出板块。
   return {
     title,
     subject: oneLine(raw?.subject || topic, 40) || topic,
     category: oneLine(raw?.category, 30) || '通识 / 自主学习',
     description: oneLine(raw?.description, 200) || `围绕「${topic}」自动整理的学习库。`,
     chapters,
-    plates
+    plates: []
   };
 }
 
@@ -305,6 +320,7 @@ export function normalizePresetOutline(raw, { topic }) {
         name: secName,
         summary,
         points: points.length ? points : [`**${secName}**：${summary}（关联：综合应用）`],
+        weight: examWeight(sec.weight),
         questions: []
       });
     }
@@ -312,6 +328,7 @@ export function normalizePresetOutline(raw, { topic }) {
     chapters.push({
       name,
       summary: oneLine(ch.summary, 160) || sections[0].summary,
+      weight: examWeight(ch.weight),
       sections
     });
   }
@@ -562,13 +579,14 @@ function normalizeQuestion(raw, sectionName) {
   const tags = (Array.isArray(raw.tags) ? raw.tags : [sectionName])
     .map((t) => oneLine(t, 20)).filter(Boolean).slice(0, 4);
   if (!tags.length) tags.push(sectionName.slice(0, 20));
+  const figure = parseFigure(raw.figure);
 
   if (type === 'judge') {
     const a = String(Array.isArray(raw.answer) ? raw.answer[0] : raw.answer || '');
     const answer = /^(正确|对|是|true|t|√|y|yes)$/i.test(a) ? '正确'
       : /^(错误|错|否|false|f|×|n|no)$/i.test(a) ? '错误' : '正确';
     const claim = stem.replace(/^判断\s*[：:]\s*/, '') || stem;
-    return { type, stem: claim, options: [], answer: [answer], analysis, difficulty, tags };
+    return { type, stem: claim, options: [], answer: [answer], analysis, difficulty, tags, figure };
   }
 
   const options = padOptions(Array.isArray(raw.options) ? raw.options : [], stem);
@@ -582,7 +600,7 @@ function normalizeQuestion(raw, sectionName) {
     const uniq = [...new Set(letters)].sort();
     answer = uniq.length >= 2 ? uniq.join(',') : 'A,B';
   }
-  return { type, stem, options, answer, analysis, difficulty, tags };
+  return { type, stem, options, answer, analysis, difficulty, tags, figure };
 }
 
 /**
@@ -704,29 +722,36 @@ function fallbackQuestions(sec, need) {
 }
 
 /**
- * 严格对齐用户填写的题量：按每节目标裁剪，缺额用兜底题补齐。
- * 只在显式传入总量时启用，避免改变默认「按等级估算」的行为。
+ * 严格对齐按考试权重分摊后的题量：按每节目标裁剪，缺额用兜底题补齐。
+ * 目标来自 planSectionTargets，未显式填写总量时同样生效。
  */
-export function finalizeQuestionCounts(outline, targetByKey, quality) {
+export function finalizeQuestionCounts(outline, targetByKey, quality, { exact = true } = {}) {
   const seen = new Set();
   let filled = 0;
   for (const ch of outline.chapters) {
     for (const sec of ch.sections) {
       const target = Math.max(0, targetByKey.get(`${ch.name}||${sec.name}`) || 0);
+      if (target > 0 && !sec.questions.length && quality) quality.sectionsFilled += 1;
+      // 未指定总题量时不裁剪：模型按内容多出的题全部保留，题量只作为下限参考。
+      const cap = exact ? target : Infinity;
       const kept = [];
       for (const q of sec.questions) {
         const key = `${q.type}|${q.stem}|${q.options.join('|')}|${Array.isArray(q.answer) ? q.answer.join('') : q.answer}`;
         if (seen.has(key)) continue;
         seen.add(key);
         kept.push(q);
-        if (kept.length >= target) break;
+        if (kept.length >= cap) break;
       }
       if (kept.length < target) {
-        const extra = fallbackQuestions(sec, target - kept.length);
-        filled += extra.length;
-        kept.push(...extra);
+        // 未指定总量时保持旧行为：只给完全空白的小节补 1 道兜底题，不强行凑满目标
+        const need = exact ? target - kept.length : (kept.length ? 0 : 1);
+        if (need > 0) {
+          const extra = fallbackQuestions(sec, need);
+          filled += extra.length;
+          kept.push(...extra);
+        }
       }
-      sec.questions = kept.slice(0, target);
+      sec.questions = kept.slice(0, cap);
     }
   }
   if (quality) quality.fallbackQuestions = filled;
@@ -744,15 +769,27 @@ function sourceDigest(sources, maxChars) {
 }
 
 /**
- * 把总数精确分到 n 个桶：前余数个桶各多 1，保证 sum(result) === total。
- * 用户在大纲里填写的题量 / 案例数都靠它落实，避免「按比例四舍五入」造成缺漏或超额。
+ * 按考试权重精确分配总数：先取整数部分，再按余数从大到小补 1，保证 sum === total。
+ * 权重来自大纲里模型给出的 1–5 分（出题频率 + 知识重要程度）。
  */
-export function distributeCount(total, buckets) {
+export function distributeByWeight(total, weights) {
   const n = Math.max(0, Math.floor(Number(total) || 0));
-  const b = Math.max(1, Math.floor(Number(buckets) || 1));
-  const base = Math.floor(n / b);
-  const rest = n % b;
-  return Array.from({ length: b }, (_, i) => base + (i < rest ? 1 : 0));
+  const ws = (Array.isArray(weights) ? weights : []).map((w) => examWeight(w));
+  const len = ws.length;
+  if (!len) return [];
+  const sum = ws.reduce((a, b) => a + b, 0) || 1;
+  const out = ws.map((w) => Math.floor((n * w) / sum));
+  let used = out.reduce((a, b) => a + b, 0);
+  const order = ws
+    .map((w, i) => ({ i, rem: (n * w) % sum }))
+    .sort((a, b) => b.rem - a.rem || a.i - b.i);
+  let k = 0;
+  while (used < n) {
+    out[order[k % len].i] += 1;
+    used += 1;
+    k += 1;
+  }
+  return out;
 }
 
 /** 知识图谱生成用的章节骨架：只给结构，不重复塞大段资料。 */
@@ -815,21 +852,23 @@ function enrichPlates(plates, chapters) {
  * 独立生成详细知识图谱：层级（一级概念 + 二级子概念）与关联（（关联：…））都写进 points，
  * 避免把知识图谱挤在大纲那一次 JSON 里导致板块少、要点浅。
  */
-export async function generateKnowledgeGraph({ llm, outline, digest, reporter, quality }) {
+export async function generateKnowledgeGraph({ llm, outline, digest, reporter, quality, examFocus = [] }) {
   const target = Math.max(6, Math.min(10, outline.chapters.length * 2));
   const chapters = knowledgeSkeleton(outline);
+  const focus = Array.isArray(examFocus) ? examFocus : [];
   try {
-    reporter?.stage('knowledge', 48, `生成知识图谱（目标 ${target} 个板块）`);
-    const raw = await withHeartbeat(reporter, 'knowledge', 48, `生成知识图谱（${target} 个板块）`, () => llm.chatJSON({
+    reporter?.stage('knowledge', 60, `生成知识图谱（目标 ${target} 个板块）`);
+    const raw = await withHeartbeat(reporter, 'knowledge', 60, `生成知识图谱（${target} 个板块）`, () => llm.chatJSON({
       task: 'plates',
       system: PLATES_SYSTEM,
       user: {
         instruction: `为以下大纲生成 ${target} 个知识板块，只输出 JSON；板块要覆盖全部章节。`,
         plateTarget: target,
         chapters,
+        examFocus: focus,
         sources: digest.slice(0, 6)
       },
-      payload: { plateTarget: target, chapters, sources: digest.slice(0, 6) },
+      payload: { plateTarget: target, chapters, examFocus: focus, sources: digest.slice(0, 6) },
       maxTokens: 8000
     }));
     let plates = normalizePlates(raw?.plates || raw, {
@@ -855,6 +894,46 @@ export async function generateKnowledgeGraph({ llm, outline, digest, reporter, q
   return plates.length ? plates : buildOutlinePlates(outline.chapters, { max: 10 });
 }
 
+/** 把已生成的题目与案例折算成「考试重点」信号，供知识图谱排定考点优先级。 */
+function buildExamFocus(outline) {
+  return outline.chapters.map((ch) => {
+    const freq = new Map();
+    let questions = 0;
+    for (const sec of ch.sections || []) {
+      for (const q of sec.questions || []) {
+        questions += 1;
+        for (const tag of q.tags || []) freq.set(tag, (freq.get(tag) || 0) + 1);
+      }
+    }
+    for (const c of ch.cases || []) {
+      for (const tag of c.tags || []) freq.set(tag, (freq.get(tag) || 0) + 1);
+    }
+    return {
+      name: ch.name,
+      weight: examWeight(ch.weight),
+      questions,
+      hotTags: [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([tag]) => tag),
+      cases: (ch.cases || []).slice(0, 4).map((c) => c.title)
+    };
+  });
+}
+
+/** 知识图谱生成后，把之前留空的案例按章回填到对应板块。 */
+function backfillCaseCategories(outline) {
+  const plateNames = (outline.plates || []).map((p) => p.name);
+  const pairs = [];
+  for (const plate of outline.plates || []) {
+    for (const name of plate.chapters || []) pairs.push([name, plate.name]);
+  }
+  for (const ch of outline.chapters) {
+    const hit = pairs.find(([name]) => name === ch.name || name.includes(ch.name) || ch.name.includes(name));
+    if (!hit) continue;
+    for (const c of ch.cases || []) {
+      if (!plateNames.includes(c.category)) c.category = hit[1];
+    }
+  }
+}
+
 /** 把章/节摊平成列表，供分批出题使用。 */
 function sectionEntries(outline) {
   const entries = [];
@@ -862,6 +941,36 @@ function sectionEntries(outline) {
     for (const sec of ch.sections) entries.push({ ch, sec });
   }
   return entries;
+}
+
+/**
+ * 综合章权重与节权重：章越重要、节越核心，题量越多；
+ * 避免「章权重不同但节权重都填 3」时又退回平均分配。
+ */
+function effectiveSectionWeight(ch, sec) {
+  return Math.min(5, Math.max(1, examWeight(ch && ch.weight) + examWeight(sec && sec.weight) - 3));
+}
+
+/**
+ * 每节题量：给了总题量就按节权重精确分摊；
+ * 没给则以 questionsPerSection 为基准，按 weight/平均权重 缩放（每节 1–20）。
+ */
+export function planSectionTargets(outline, questionsPerSection = 3, questionCount = 0) {
+  const entries = sectionEntries(outline);
+  const map = new Map();
+  if (!entries.length) return map;
+  const key = (ch, sec) => `${ch.name}||${sec.name}`;
+  const weights = entries.map(({ ch, sec }) => effectiveSectionWeight(ch, sec));
+  let counts;
+  if (Number(questionCount) > 0) {
+    counts = distributeByWeight(questionCount, weights);
+  } else {
+    const avg = weights.reduce((a, b) => a + b, 0) / weights.length || 3;
+    const base = Math.max(1, Number(questionsPerSection) || 1);
+    counts = weights.map((w) => Math.max(1, Math.round((base * w) / avg)));
+  }
+  entries.forEach(({ ch, sec }, i) => map.set(key(ch, sec), counts[i]));
+  return map;
 }
 
 /** 把单章的小节摊平成列表，供「逐章出题 + 逐章确认」使用。 */
@@ -955,7 +1064,8 @@ export function normalizeCase(raw, { chapterName = '', plateNames = [], defaultC
     difficulty: ['易', '中', '难'].includes(raw.difficulty) ? raw.difficulty : '中',
     tags: (Array.isArray(raw.tags) ? raw.tags : String(raw.tags || '').split(/[,，、]/))
       .map((t) => oneLine(t, 30)).filter(Boolean).slice(0, 4),
-    questions
+    questions,
+    figure: parseFigure(raw.figure)
   };
 }
 
@@ -1004,10 +1114,10 @@ function fallbackCases(ch, need, { plateName = '' } = {}) {
   return out;
 }
 
-/** 案例按章分配：严格求和等于用户填写的案例数。 */
+/** 案例按章权重分配：高频章节多分案例，且严格求和等于用户填写的案例数。 */
 export function planCaseCounts(outline, count) {
   const chapters = outline.chapters || [];
-  const counts = distributeCount(count, chapters.length);
+  const counts = distributeByWeight(count, chapters.map((ch) => ch.weight));
   return chapters.map((ch, i) => ({ ch, count: counts[i] }));
 }
 
@@ -1268,11 +1378,7 @@ export async function generateOutlineRaw({ topic, sources, llm, config, reporter
     });
   }
 
-  // 知识图谱单独生成：比挤在大纲 JSON 里更详细，层级与关联都写在 points 中。
-  outline.plates = await generateKnowledgeGraph({
-    llm, outline, digest, reporter, quality
-  });
-
+  // 知识图谱放到选择题与案例精析之后生成（见 generateStudyLibrary），这里只产出目录。
   return { outline, quality, digest, plan };
 }
 
@@ -1300,31 +1406,17 @@ export async function generateStudyLibrary({
     quality = pre.quality;
   }
 
-  /* 目录是用户直接给的（App 里改过的目录）时还没有知识板块，这里补一次 */
-  if (!(outline.plates || []).length) {
-    const outlineDigest = sourceDigest(sources, Math.min(config.maxSourceChars, 40_000));
-    outline.plates = await generateKnowledgeGraph({ llm, outline, digest: outlineDigest, reporter, quality });
-  }
+  const digest = sourceDigest(sources, Math.min(config.maxSourceChars, 40_000));
 
-  reporter?.stage('knowledge', 55, `已生成 ${outline.chapters.length} 章 / ${outline.plates.length} 个知识板块 / ${outline.plates.reduce((n, p) => n + p.points.length, 0)} 个知识节点`);
-
-  // 案例精析：用户填写了案例数才生成，条目数严格等于配置值。
+  // 案例精析：用户填写了案例数才生成；知识图谱还没生成，category 先留空。
   if (caseCount > 0) {
-    const digest = sourceDigest(sources, Math.min(config.maxSourceChars, 40_000));
     await generateCases({ llm, outline, digest, count: caseCount, reporter, quality });
   }
 
-  // 题量：优先按用户填写的总量精确分摊到每个小节；没填时沿用每节题量。
-  const allEntries = sectionEntries(outline);
-  const sectionTargets = questionCount > 0 ? distributeCount(questionCount, allEntries.length) : null;
-  const targetByKey = new Map();
-  if (sectionTargets) {
-    allEntries.forEach(({ ch, sec }, i) => targetByKey.set(`${ch.name}||${sec.name}`, sectionTargets[i]));
-  }
-  const targetOf = (ch, sec) => (sectionTargets
-    ? (targetByKey.get(`${ch.name}||${sec.name}`) || 0)
-    : qps);
-  const maxTarget = Math.max(1, ...(sectionTargets || [qps]));
+  // 题量按考试权重分摊：高频章/节多出题，低频章/节少出题，不再按章节平均分配。
+  const targetByKey = planSectionTargets(outline, qps, questionCount);
+  const targetOf = (ch, sec) => targetByKey.get(`${ch.name}||${sec.name}`) || 0;
+  const maxTarget = Math.max(1, ...targetByKey.values());
   const budgetOf = (entries) => Math.min(8000, Math.max(
     2000,
     entries.reduce((n, { ch, sec }) => n + targetOf(ch, sec), 0) * 260 + 1200
@@ -1418,27 +1510,36 @@ export async function generateStudyLibrary({
       });
     });
   }
-  if (sectionTargets) {
-    finalizeQuestionCounts(outline, targetByKey, quality);
-    quality.questionTarget = questionCount;
-  } else {
-    normalizeQuestions({ sections: [] }, outline, { questionsPerSection: qps, stats: quality });
-  }
+  finalizeQuestionCounts(outline, targetByKey, quality, { exact: questionCount > 0 });
+  if (questionCount > 0) quality.questionTarget = questionCount;
 
-  reporter?.stage('render', 72, '渲染 kshare Markdown');
+  // 选择题与案例精析都完成后，最后一步才生成知识图谱。
+  outline.plates = await generateKnowledgeGraph({
+    llm, outline, digest, reporter, quality, examFocus: buildExamFocus(outline)
+  });
+  backfillCaseCategories(outline);
+  reporter?.stage(
+    'knowledge',
+    70,
+    `已生成 ${outline.chapters.length} 章 / ${outline.plates.length} 个知识板块 / ${outline.plates.reduce((n, p) => n + p.points.length, 0)} 个知识节点`
+  );
+
+  reporter?.stage('render', 74, '渲染 kshare Markdown');
   outline.plates.forEach((plate, idx) => {
     plate.diagram = `images/plate-${String(idx + 1).padStart(2, '0')}.svg`;
     plate.diagramNote = `${plate.name} 的知识关联示意`;
   });
-  const render = renderLibraryMarkdown({ meta, outline });
   ensureDir(meta.workDir);
+  const imagesDir = path.join(meta.workDir, 'images');
+  ensureDir(imagesDir);
+  // 配图：把题目/案例里的结构化 figure 渲染成 SVG，题目图拼进题干。
+  const figureImages = attachFigures(outline, imagesDir);
+  const render = renderLibraryMarkdown({ meta, outline });
   const mdPath = path.join(meta.workDir, 'library.md');
   /* 最后一道保险：整份 Markdown 再过一遍，确保任何字段都没有来源 / 推广标记 */
   fs.writeFileSync(mdPath, scrubBrands(render.md), 'utf8');
 
   // 图解 SVG
-  const imagesDir = path.join(meta.workDir, 'images');
-  ensureDir(imagesDir);
   const diagrams = [];
   outline.plates.forEach((plate, idx) => {
     const file = `plate-${String(idx + 1).padStart(2, '0')}.svg`;
@@ -1469,6 +1570,7 @@ export async function generateStudyLibrary({
     plates: outline.plates.length,
     points: outline.plates.reduce((n, p) => n + p.points.length, 0),
     diagrams: diagrams.length,
+    figureImages: figureImages.length,
     sourceChars: sources.reduce((n, s) => n + textStats(s.text).meaningful, 0),
     quality: { ...quality, actualChapters: outline.chapters.length }
   };
@@ -1573,6 +1675,7 @@ export function renderLibraryMarkdown({ meta, outline }) {
       lines.push('- 材料：');
       String(c.material || '').split('\n').forEach((l) => lines.push(`  ${l}`));
       if (c.category) lines.push(`- 分类：${c.category}`);
+      if (c.figurePath) lines.push(`- 图解：${c.figurePath}`);
       if (c.quickNote) lines.push(`- 速记：${c.quickNote}`);
       lines.push('- 解析：');
       String(c.analysis || '').split('\n').forEach((l) => lines.push(`  ${l}`));
@@ -1589,6 +1692,150 @@ export function renderLibraryMarkdown({ meta, outline }) {
     });
   }
   return { md: lines.join('\n').replace(/\n{3,}/g, '\n\n') + '\n' };
+}
+
+/* ---------------- 题目 / 案例配图 ---------------- */
+
+const FIGURE_FONT = "'PingFang SC', 'Microsoft YaHei', sans-serif";
+
+function escapeXml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function figureList(value, max, cell) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => oneLine(typeof item === 'string' ? item : item?.text, cell))
+    .filter(Boolean)
+    .slice(0, max);
+}
+
+/**
+ * 解析模型给出的结构化 figure；只在题目/案例确实依赖图示时使用。
+ * 支持 flow / layers（步骤、层级）与 table（对比表）三种低风险图形。
+ */
+export function parseFigure(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const kindRaw = String(raw.kind || '').toLowerCase();
+  const kind = /table|表/.test(kindRaw) ? 'table'
+    : /layer|层/.test(kindRaw) ? 'layers' : 'flow';
+  const title = oneLine(raw.title, 24);
+  const items = figureList(raw.items, 6, 60);
+  const columns = figureList(raw.columns, 4, 16);
+  const rows = (Array.isArray(raw.rows) ? raw.rows : [])
+    .map((row) => (Array.isArray(row) ? row : [row])
+      .map((cell) => oneLine(cell, 28))
+      .slice(0, Math.max(1, columns.length)))
+    .filter((row) => row.length)
+    .slice(0, 8);
+  if (kind === 'table') {
+    if (columns.length < 2 || !rows.length) return null;
+  } else if (items.length < 2) {
+    return null;
+  }
+  return { kind, title, items, columns, rows };
+}
+
+/** 把结构化 figure 渲染成确定性 SVG（无脚本、无外链、无 foreignObject）。 */
+export function renderFigureSvg(figure) {
+  const W = 760;
+  const PAD = 34;
+  const ACCENT = '#4263eb';
+  const INK = '#1f2933';
+  const title = escapeXml(figure.title || (figure.kind === 'table' ? '对比表' : '流程示意'));
+  if (figure.kind === 'table') {
+    const cols = Math.max(2, figure.columns.length);
+    const rows = figure.rows;
+    const colW = (W - PAD * 2) / cols;
+    const headerH = 40;
+    const rowH = 38;
+    const top = 64;
+    const H = top + headerH + rows.length * rowH + 20;
+    const cellChars = Math.max(3, Math.floor((colW - 18) / 12));
+    const head = figure.columns.slice(0, cols).map((col, i) => (
+      `<text x="${(PAD + i * colW + 10).toFixed(1)}" y="${top + 26}" font-size="13" font-weight="600" fill="#ffffff" font-family="${FIGURE_FONT}">${escapeXml(truncate(col, cellChars))}</text>`
+    )).join('');
+    const body = rows.map((row, ri) => {
+      const y = top + headerH + ri * rowH;
+      const fill = ri % 2 === 0 ? '#ffffff' : '#f1f3f5';
+      const cells = Array.from({ length: cols }, (_, ci) => {
+        const text = escapeXml(truncate(row[ci] || '', cellChars));
+        return `<text x="${(PAD + ci * colW + 10).toFixed(1)}" y="${y + 24}" font-size="13" fill="${INK}" font-family="${FIGURE_FONT}">${text}</text>`;
+      }).join('');
+      return `<rect x="${PAD}" y="${y}" width="${W - PAD * 2}" height="${rowH}" fill="${fill}"/>${cells}`;
+    }).join('\n  ');
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${title}">
+  <rect width="${W}" height="${H}" fill="#f7f8fa"/>
+  <text x="${PAD}" y="44" font-size="16" font-weight="600" fill="${INK}" font-family="${FIGURE_FONT}">${title}</text>
+  <rect x="${PAD}" y="${top}" width="${W - PAD * 2}" height="${headerH}" rx="6" fill="${ACCENT}"/>
+  ${head}
+  ${body}
+  <rect x="${PAD}" y="${top}" width="${W - PAD * 2}" height="${headerH + rows.length * rowH}" rx="6" fill="none" stroke="#dee2e6"/>
+</svg>
+`;
+  }
+  const stacked = figure.kind === 'layers';
+  const boxH = 48;
+  const gap = 26;
+  const top = 72;
+  const H = top + figure.items.length * (boxH + gap) + 18;
+  const boxes = figure.items.map((item, i) => {
+    const y = top + i * (boxH + gap);
+    const inset = stacked ? i * 26 : 0;
+    const x = PAD + inset;
+    const w = W - PAD * 2 - inset * 2;
+    const maxChars = Math.max(4, Math.floor((w - 36) / 14));
+    const label = escapeXml(truncate(item, maxChars));
+    const fill = stacked && i % 2 === 1 ? '#ffffff' : '#fdfdff';
+    const cx = PAD + 30 + inset;
+    const line = i > 0
+      ? `<line x1="${cx}" y1="${top + (i - 1) * (boxH + gap) + boxH}" x2="${cx}" y2="${y}" stroke="${ACCENT}" stroke-width="2" stroke-dasharray="4 3"/>`
+      : '';
+    return `${line}
+  <rect x="${x}" y="${y}" width="${w}" height="${boxH}" rx="10" fill="${fill}" stroke="${ACCENT}" stroke-width="1.5"/>
+  <circle cx="${cx}" cy="${y + boxH / 2}" r="13" fill="${ACCENT}"/>
+  <text x="${cx}" y="${y + boxH / 2 + 5}" font-size="13" fill="#ffffff" text-anchor="middle" font-family="${FIGURE_FONT}">${i + 1}</text>
+  <text x="${PAD + 54 + inset}" y="${y + boxH / 2 + 5}" font-size="14" fill="${INK}" font-family="${FIGURE_FONT}">${label}</text>`;
+  }).join('\n  ');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${title}">
+  <rect width="${W}" height="${H}" fill="#f7f8fa"/>
+  <text x="${PAD}" y="44" font-size="16" font-weight="600" fill="${INK}" font-family="${FIGURE_FONT}">${title}</text>
+  ${boxes}
+</svg>
+`;
+}
+
+/**
+ * 把题目/案例里的 figure 落盘为 images/*.svg：
+ * 题目图拼进题干（Markdown 图片，随 kshare 内联），案例图写入「图解」字段。
+ */
+function attachFigures(outline, imagesDir) {
+  const files = [];
+  outline.chapters.forEach((ch, ci) => {
+    ch.sections.forEach((sec, si) => {
+      sec.questions.forEach((q, qi) => {
+        if (!q.figure) return;
+        const file = `q-${String(ci + 1).padStart(2, '0')}-${String(si + 1).padStart(2, '0')}-${String(qi + 1).padStart(2, '0')}.svg`;
+        fs.writeFileSync(path.join(imagesDir, file), renderFigureSvg(q.figure), 'utf8');
+        q.stem = `${q.stem} ![](images/${file})`;
+        delete q.figure;
+        files.push(`images/${file}`);
+      });
+    });
+    (ch.cases || []).forEach((c, ki) => {
+      if (!c.figure) return;
+      const file = `case-${String(ci + 1).padStart(2, '0')}-${ki + 1}.svg`;
+      fs.writeFileSync(path.join(imagesDir, file), renderFigureSvg(c.figure), 'utf8');
+      c.figurePath = `images/${file}`;
+      delete c.figure;
+      files.push(c.figurePath);
+    });
+  });
+  return files;
 }
 
 /** 生成简洁的知识关联 SVG 图解（无脚本、无外链）。 */

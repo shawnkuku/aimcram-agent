@@ -196,7 +196,7 @@ export function createInteractHooks(io) {
     /* 用户在前端「生成方案」里设置的题量与案例数：精确总量，不是每节题量 */
     const counts = {};
     const qc = Math.round(Number(msg.questionCount));
-    if (Number.isFinite(qc) && qc > 0) counts.questionCount = Math.min(2000, qc);
+    if (Number.isFinite(qc) && qc > 0) counts.questionCount = qc;
     const cc = Math.round(Number(msg.caseCount));
     if (Number.isFinite(cc) && cc > 0) counts.caseCount = Math.min(200, cc);
     const wrap = (pack) => {
@@ -207,7 +207,7 @@ export function createInteractHooks(io) {
     /* 上层按用户填写的题量算出每节题量时优先采纳，避免只能用三档预设 */
     const per = Math.round(Number(msg.perSection));
     if (Number.isFinite(per) && per > 0) {
-      return wrap({ outline: merged, questionsPerSection: Math.max(1, Math.min(20, per)) });
+      return wrap({ outline: merged, questionsPerSection: Math.max(1, per) });
     }
     if (msg.depth && DEPTH_LEVELS[msg.depth]) {
       return wrap({ outline: merged, questionsPerSection: DEPTH_LEVELS[msg.depth].perSection });

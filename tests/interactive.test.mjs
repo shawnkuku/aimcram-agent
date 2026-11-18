@@ -434,8 +434,8 @@ test('集成：采纳大纲等级改变每节题量', async (t) => {
   });
 
   assert.equal(result.verification.ok, true, JSON.stringify(result.verification.errors));
-  // 3 章 × 1 节，deep 档每节 10 题 → slice 到 11；共 33 题，明显超过默认 2 题/节。
-  assert.equal(result.stats.questions, 33);
+  // 3 章 × 1 节，deep 档每节 10 题；未指定总题量时题量只作下限，多出的题保留，至少 33 题。
+  assert.ok(result.stats.questions >= 33, `实际生成 ${result.stats.questions} 题`);
 });
 
 test('集成：确认消息携带的题量与案例数被精确执行', async (t) => {
