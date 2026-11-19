@@ -189,4 +189,81 @@ export function extractMarkdownSource({ id, url, finalUrl, markdown, title, fetc
   });
 }
 
+/**
+ * 带凭证直连抓取回来的内容 → Source。
+ * 按 Content-Type 和文件头选择解析器，HTML / PDF / Word / Excel / 文本都能直接入库。
+ */
+export async function extractRemoteSource({
+  id, url, finalUrl, contentType, buffer, title, fetchedAt, status
+}) {
+  const abs = finalUrl || url || '';
+  const ctype = String(contentType || '').toLowerCase();
+  let fileHint = '';
+  try { fileHint = path.basename(new URL(abs).pathname); } catch { fileHint = ''; }
+  let type = '';
+  if (ctype.includes('pdf')) type = 'pdf';
+  else if (ctype.includes('wordprocessingml')) type = 'docx';
+  else if (ctype.includes('spreadsheetml')) type = 'xlsx';
+  else if (ctype.includes('html') || ctype.includes('xml')) type = 'html';
+  else if (ctype.includes('markdown')) type = 'markdown';
+  else if (ctype.startsWith('text/')) type = 'text';
+  else {
+    try { type = detectType(fileHint, buffer); } catch { type = 'text'; }
+  }
+  if (type === 'image') {
+    throw new AgentError('LA002', '地址返回的是图片', {
+      hint: '图片 OCR 请先把图片保存到本地再作为文件资料添加'
+    });
+  }
+  const baseTitle = title || safeBaseName(fileHint || abs);
+  const meta = {
+    ext: path.extname(fileHint).toLowerCase(),
+    bytes: buffer.length,
+    method: 'http',
+    status,
+    fetchedAt
+  };
+
+  if (type === 'markdown' || type === 'text') {
+    const r = extractText(buffer, { title: baseTitle });
+    return buildSource({
+      id, kind: 'url', type, title: r.title, text: r.text, url: abs,
+      meta, quality: { mode: 'lossless', confidence: 1 }, warnings: r.warnings
+    });
+  }
+  if (type === 'html') {
+    const r = extractArticle(buffer.toString('utf8'), { url: abs, fallbackTitle: baseTitle });
+    return buildSource({
+      id, kind: 'url', type: 'html', title: r.title || baseTitle, text: r.text, url: abs,
+      meta: { ...meta, method: r.method }, quality: { mode: 'heuristic', confidence: null },
+      warnings: r.warnings
+    });
+  }
+  if (type === 'pdf') {
+    const r = await extractPdf(buffer, { title: baseTitle });
+    return buildSource({
+      id, kind: 'url', type: 'pdf', title: r.title || baseTitle, text: r.text, url: abs,
+      meta: { ...meta, method: 'pdfjs', pageCount: r.pageCount },
+      quality: { mode: 'lossless', confidence: 1 }, warnings: r.warnings
+    });
+  }
+  if (type === 'docx') {
+    const r = await extractDocx(buffer, { title: baseTitle });
+    return buildSource({
+      id, kind: 'url', type: 'docx', title: r.title || baseTitle, text: r.text, url: abs,
+      meta: { ...meta, method: r.method }, quality: { mode: 'lossless', confidence: 1 },
+      warnings: r.warnings, assets: r.assets
+    });
+  }
+  if (type === 'xlsx') {
+    const r = await extractXlsx(buffer, { title: baseTitle });
+    return buildSource({
+      id, kind: 'url', type: 'text', title: r.title || baseTitle, text: r.text, url: abs,
+      meta: { ...meta, method: 'unzip+xml', sheets: r.sheets, rows: r.rows },
+      quality: { mode: 'lossless', confidence: 1 }
+    });
+  }
+  throw new AgentError('LA002', `不支持的网络资料类型：${type}`);
+}
+
 export { guessImageMime };

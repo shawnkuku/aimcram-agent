@@ -36,9 +36,12 @@ export const DEFAULTS = {
   generator: 'aimcram-agent',
 
   // 生成规模
-  questionsPerSection: num(process.env.LA_QUESTIONS_PER_SECTION, 2),
+  questionsPerSection: num(process.env.LA_QUESTIONS_PER_SECTION, 3),
   maxSections: num(process.env.LA_MAX_SECTIONS, 12),
   maxSourceChars: num(process.env.LA_MAX_SOURCE_CHARS, 60_000),
+
+  /* 指定网址需要登录时由桌面端经环境变量注入；只用于用户填写的地址，不落盘 */
+  sourceAuth: process.env.LA_SOURCE_AUTH || '',
 
   // OCR
   ocrCacheDir: process.env.LA_OCR_CACHE_DIR || path.join(os.tmpdir(), 'aimcram-agent')

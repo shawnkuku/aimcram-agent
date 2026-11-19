@@ -57,7 +57,7 @@ generate 选项：
   --with-web                  模式一同时做自主抓取（等价于 --mode combined）
   --pages <N>                 最多抓取页数（默认 8）
   --depth <N>                 站内跟进深度（默认 1）
-  --per-section <N>           每节题目数（默认 2）
+  --per-section <N>           每节题目数（默认 3）
   --questions <N>             题目总数（精确值，按小节分摊后逐节补齐/裁剪）
   --cases <N>                 案例精析数量（精确值，默认 0 表示不生成）
   --outline <文件>            沿用已有目录（JSON：{title, chapters:[{name, sections:[{name}]}]}）

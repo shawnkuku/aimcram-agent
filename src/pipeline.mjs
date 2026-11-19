@@ -16,7 +16,8 @@ import { createLLM } from './llm.mjs';
 import { MockLLM } from './mock.mjs';
 import { DeepSeekTools } from './web/deepseek-tools.mjs';
 import { crawlTopic } from './web/crawl.mjs';
-import { extractFile, extractInlineText, extractMarkdownSource } from './extract/index.mjs';
+import { extractFile, extractInlineText, extractMarkdownSource, extractRemoteSource } from './extract/index.mjs';
+import { normalizeSourceAuth, authAllowsHost, fetchUrlWithAuth } from './http-auth.mjs';
 import { generateStudyLibrary, generateOutlineRaw, normalizePresetOutline } from './generate.mjs';
 import { importLibrary } from './import.mjs';
 import { suggestDepth } from './interactive.mjs';
@@ -64,6 +65,8 @@ export async function runPipeline(params = {}) {
   const reporter = params.reporter;
   const inputs = (params.inputs || []).map((s) => String(s).trim()).filter(Boolean);
   const seeds = (params.seeds || []).map((s) => String(s).trim()).filter(Boolean);
+  /* 指定网址需要登录时，凭证由桌面端注入；只对用户填写的地址生效 */
+  const sourceAuth = normalizeSourceAuth(config.sourceAuth);
   let topic = String(params.topic || '').trim();
   let mode = resolveMode(params.mode || 'auto', inputs.length > 0);
   if (mode === 'sources' && !inputs.length) {
@@ -94,14 +97,39 @@ export async function runPipeline(params = {}) {
       try {
         let source;
         if (isUrl(input)) {
-          const page = await getTools().fetchPage(input);
-          source = extractMarkdownSource({
-            url: input,
-            finalUrl: page.finalUrl,
-            markdown: page.markdown,
-            title: page.title,
-            fetchedAt: isoNow()
-          });
+          let remote = null;
+          if (sourceAuth && authAllowsHost(sourceAuth, input)) {
+            try {
+              const page = await fetchUrlWithAuth(input, sourceAuth, {
+                timeoutMs: config.crawlTimeoutMs,
+                maxBytes: config.maxBytes
+              });
+              remote = await extractRemoteSource({
+                url: input,
+                finalUrl: page.finalUrl,
+                contentType: page.contentType,
+                buffer: page.buffer,
+                fetchedAt: isoNow(),
+                status: page.status
+              });
+              remote.meta = { ...remote.meta, auth: sourceAuth.type };
+              reporter?.warn(`已按填写的凭证直连抓取：${label}`);
+            } catch (err) {
+              if (err instanceof AgentError && err.code === 'LA005') throw err;
+              reporter?.warn(`带凭证抓取失败，改用 DeepSeek Fetch：${err.message}`);
+            }
+          }
+          if (!remote) {
+            const page = await getTools().fetchPage(input);
+            remote = extractMarkdownSource({
+              url: input,
+              finalUrl: page.finalUrl,
+              markdown: page.markdown,
+              title: page.title,
+              fetchedAt: isoNow()
+            });
+          }
+          source = remote;
         } else if (input === '@clipboard') {
           source = await readClipboard();
         } else if (input.startsWith('text:')) {
@@ -113,7 +141,7 @@ export async function runPipeline(params = {}) {
         sources.push(source);
         for (const w of source.warnings || []) reporter?.warn(`[${source.title}] ${w}`);
       } catch (err) {
-        if (err instanceof AgentError && err.code === 'LA005') {
+        if (err instanceof AgentError && err.code === 'LA005' && !err.details?.auth) {
           reporter?.warn(`跳过（合规限制）：${label} · ${err.message}`);
           notes.push({ input, skipped: true, code: err.code, message: err.message });
           continue;

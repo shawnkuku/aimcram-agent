@@ -27,24 +27,24 @@ const OUTLINE_SYSTEM = `你是资深课程设计专家，负责把零散资料�
   "chapters": [
     {
       "name": "章的短名称（不要带“第N章”前缀）",
-      "summary": "本章一句话概述",
+      "summary": "本章 60–120 字概述：知识主线、考查重点",
       "weight": 3,
       "sections": [
         {
           "name": "节名称（不要带编号）",
-          "summary": "本节 40–80 字摘要",
+          "summary": "本节 60–120 字摘要：讲什么、怎么考",
           "weight": 3,
-          "points": ["**知识点名**：精简摘要（关联：另一个知识点）", "..."]
+          "points": ["**知识点名**：定义/结论 + 判断依据或易错点（关联：另一个知识点）", "..."]
         }
       ]
     }
   ]
 }
 硬性要求：
-1. 章数必须等于 structure.chapters，每章 3–5 节，每节 2–4 个知识点；知识点必须包含精简摘要，并用“（关联：…）”标注与其他知识点的关系。
+1. 章数必须等于 structure.chapters，每章 4–6 节，每节 4–6 个知识点；每个知识点都要写成「**名称**：定义/结论 + 判断依据或易错点」，并用“（关联：…）”标注与其他知识点的关系。
 2. 章节要具体、可出题：章名落到知识模块（如「传输层协议」「网络安全防护」），不要用「基础」「概述」「综合」这类空泛命名；每节聚焦一个可以独立命题的知识点，避免同一考点在多个小节重复。
 3. 内容必须来自给定资料，不编造资料中没有的事实；资料不足时合并小节而不是扩写。
-4. points 的每条不超过 90 字，不要换行。
+4. points 的每条 40–120 字，不要换行；同一节要覆盖概念定义、流程步骤、对比辨析、易错点、应用场景中适用的部分，不要只写一句结论。
 5. 不允许把全部内容压进 1 章；章是按主题划分的一级结构，必须相互独立。
 6. 每章与每节都必须给出 weight（1–5 的整数）：按该章/节在真实考试中的出题频率与知识重要程度打分，5 = 每年必考的核心，1 = 很少出现的边缘内容；不得所有章都填同一个值，权重会直接决定题量与案例的分配比例。`;
 
@@ -60,14 +60,14 @@ JSON 结构：
 {
   "summary": "本章一句话概述",
   "sections": [
-    { "name": "节名称（不带编号）", "summary": "40–80 字摘要", "points": ["**知识点名**：精简摘要（关联：另一个知识点）"] }
+    { "name": "节名称（不带编号）", "summary": "60–120 字摘要", "points": ["**知识点名**：定义/结论 + 判断依据（关联：另一个知识点）"] }
   ]
 }
 硬性要求：
-1. 3–5 个小节，每节 2–4 个知识点，每条知识点不超过 90 字；
+1. 4–6 个小节，每节 4–6 个知识点，每条知识点 40–120 字；
 2. 小节名要具体到可独立出题的知识点，不要写「概述」「综合练习」这类空泛名称；
 3. 内容必须来自给定资料，不编造；资料不足时减少小节，不要扩写；
-4. 知识点用“（关联：…）”标注与其他要点的关系。`;
+4. 知识点用“（关联：…）”标注与其他要点的关系，并尽量写清定义、流程、对比与易错点。`;
 
 const QUESTION_SYSTEM = `你是命题专家，基于给定章节知识点出题。
 只输出合法 JSON，不要解释、不要代码围栏。JSON 结构：
@@ -102,7 +102,8 @@ const QUESTION_SYSTEM = `你是命题专家，基于给定章节知识点出题�
 8. 配图：只有确实依赖图才能理解的内容（流程、层级结构、拓扑、数据流、对比、表格数据）才加 figure，并让题干明确指向图；figure 必须是结构化数据，不要输出 SVG、图片链接或 base64：
    - 流程/结构：{ "kind": "flow|layers", "title": "≤20字", "items": ["节点1","节点2","节点3"] }
    - 表格/对比：{ "kind": "table", "title": "≤20字", "columns": ["项目","方案A","方案B"], "rows": [["指标","值1","值2"]] }
-   不依赖图的题目不要给 figure；带 figure 的题目不超过本小节题量的 30%。`;
+   不依赖图的题目不要给 figure；带 figure 的题目不超过本小节题量的 30%。
+9. 解析要写足：先给结论，再说明判断依据、易错点以及与其它选项的差异，每条不少于 60 字；同一小节的题目要尽量覆盖不同知识点，不要反复考同一个概念。`;
 
 const PLATES_SYSTEM = `你是知识图谱设计专家，负责把课程大纲整理成层级完整、关联清晰的知识图谱。
 只输出合法 JSON，不要解释、不要代码围栏。JSON 结构：
@@ -251,7 +252,7 @@ export function normalizeOutline(raw, { topic, config }) {
       const points = (Array.isArray(sec.points) ? sec.points : [])
         .map((p) => normalizePoint(p, name))
         .filter(Boolean)
-        .slice(0, 4);
+        .slice(0, 6);
       sections.push({
         name,
         summary: oneLine(sec.summary, 160) || (points[0] ? truncate(points[0], 120) : `${name} 的要点。`),
@@ -259,7 +260,7 @@ export function normalizeOutline(raw, { topic, config }) {
         weight: examWeight(sec.weight),
         questions: []
       });
-      if (sections.length >= 6) break;
+      if (sections.length >= 8) break;
     }
     if (!sections.length) continue;
     chapters.push({
@@ -268,7 +269,7 @@ export function normalizeOutline(raw, { topic, config }) {
       weight: examWeight(ch.weight),
       sections
     });
-    if (chapters.length >= 8) break;
+    if (chapters.length >= 10) break;
   }
 
   if (!chapters.length) {
@@ -454,16 +455,16 @@ function coverChapters(plates, chapters, max = 10) {
 }
 
 /**
- * 结构目标：按小节预算反推章数（每章 3–5 节），再按资料体量微调。
- * 至少 3 章，最多 8 章；不再把整库压成 1–2 章，也不再因为没提供资料就只出 2 章。
+ * 结构目标：按小节预算反推章数（每章 4–6 节），再按资料体量微调。
+ * 至少 3 章，最多 10 章；不再把整库压成 1–2 章，也不再因为没提供资料就只出 2 章。
  */
 export function planStructure(sources, config = {}) {
   const chars = sources.reduce((n, s) => n + textStats(s.text).meaningful, 0);
   const maxSections = config.maxSections || 12;
-  const byBudget = Math.ceil(maxSections / 4);
-  const byChars = Math.ceil(chars / 3500);
-  const chapters = Math.min(8, Math.max(3, byBudget, Math.max(2, byChars)));
-  return { chars, chapters, sectionsPerChapter: [3, 5] };
+  const byBudget = Math.ceil(maxSections / 5);
+  const byChars = Math.ceil(chars / 3000);
+  const chapters = Math.min(10, Math.max(3, byBudget, Math.max(2, byChars)));
+  return { chars, chapters, sectionsPerChapter: [4, 6] };
 }
 
 /**
@@ -517,7 +518,7 @@ async function stagedOutline({ llm, topic, digest, plan, reporter }) {
   const titles = (Array.isArray(titlesRaw?.chapters) ? titlesRaw.chapters : [])
     .map((c) => oneLine(typeof c === 'string' ? c : c?.name, 40))
     .filter(Boolean)
-    .slice(0, 8);
+    .slice(0, 10);
   if (titles.length < 2) return null;
 
   const chapters = [];
@@ -528,12 +529,12 @@ async function stagedOutline({ llm, topic, digest, plan, reporter }) {
         task: 'outline-chapter',
         system: OUTLINE_EXPAND_SYSTEM,
         user: {
-          instruction: '为该章展开 3–5 个小节与知识点，只输出 JSON。',
+          instruction: '为该章展开 4–6 个小节与知识点，只输出 JSON。',
           topic,
           chapter: title,
           sources: digest.slice(0, 3)
         },
-        maxTokens: 2000
+        maxTokens: 3200
       });
       chapters.push({ name: title, summary: raw?.summary, sections: raw?.sections });
     } catch (err) {
@@ -1307,12 +1308,12 @@ export async function generateOutlineRaw({ topic, sources, llm, config, reporter
       user: {
         instruction: '根据以下资料整理学习库大纲，只输出 JSON。',
         topic,
-        structure: { chapters: plan.chapters, sectionsPerChapter: '3-5', maxSections: config.maxSections },
+        structure: { chapters: plan.chapters, sectionsPerChapter: '4-6', maxSections: config.maxSections },
         maxSections: config.maxSections,
         sources: digest
       },
       payload: { topic, sources: digest, maxSections: config.maxSections },
-      maxTokens: 6000
+      maxTokens: 8000
     });
     outline = applyOutlineMeta(normalizeOutline(outlineRaw, { topic, config }), meta);
   } catch (err) {
@@ -1336,14 +1337,14 @@ export async function generateOutlineRaw({ topic, sources, llm, config, reporter
             `上一版只有 ${outline.chapters.length} 章，不满足 structure.chapters=${plan.chapters}。`
             + '请重新输出完整大纲，章数必须达到要求，且各章主题相互独立。',
           topic,
-          structure: { chapters: plan.chapters, sectionsPerChapter: '3-5', maxSections: config.maxSections },
+          structure: { chapters: plan.chapters, sectionsPerChapter: '4-6', maxSections: config.maxSections },
           previous: outline.chapters.map((ch) => ({
             name: ch.name.replace(/^第.+?章\s*/, ''),
             sections: ch.sections.map((sec) => sec.name.replace(/^\d+(\.\d+)*\s*/, ''))
           })),
           sources: digest
         },
-        maxTokens: 6000
+        maxTokens: 8000
       });
       const retried = applyOutlineMeta(normalizeOutline(retryRaw, { topic, config }), meta);
       if (retried.chapters.length > outline.chapters.length) outline = retried;
