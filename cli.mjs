@@ -15,7 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { AgentError, errorPayload } from './src/errors.mjs';
-import { VERSION, resolveConfig, maskSecret } from './src/config.mjs';
+import { VERSION, APP_URL, resolveConfig, maskSecret } from './src/config.mjs';
 import { createReporter } from './src/log.mjs';
 import { runPipeline } from './src/pipeline.mjs';
 import { createInteractHooks } from './src/interactive.mjs';
@@ -267,6 +267,8 @@ async function cmdGenerate(opts) {
     out.push(`  报告      ${r.paths.report}`);
     if (r.appFiles) out.push(`  App 数据  ${r.appFiles.dataJs} / ${r.appFiles.kbJs}`);
     out.push('');
+    out.push('下一步    在 AimCram App 里「导入学习库」→ 选择上面的包目录（免解压），即可刷题');
+    out.push(`          App 下载 ${APP_URL}`);
     reporter.info(out.join('\n'));
   }
   return result;
@@ -299,6 +301,8 @@ function cmdBundle(opts) {
   lines.push(`  ZIP       ${result.zip}`);
   lines.push(`  结构      ${result.rootName}/collection.json + ${c.counts.packs} 个 kshare-pack/v1`);
   lines.push('');
+  lines.push('下一步    在 AimCram App 里「导入学习库」→ 选择上面的 ZIP 或解压后的目录，即可按科目刷题');
+  lines.push(`          App 下载 ${APP_URL}`);
   if (!opts.quiet) process.stdout.write(lines.join('\n'));
   return result;
 }

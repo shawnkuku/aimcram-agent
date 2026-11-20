@@ -143,6 +143,16 @@ jiakao-1.0.0/
 
 合集不改写子包内容，解包后每个子包仍可单独校验、导入；`verify` 会自动识别合集并逐包校验。
 
+### 4.2 生成之后：导入 AimCram 刷题
+
+产物就是可直接导入的学习库包，不需要解压或格式转换：
+
+1. 打开 AimCram 桌面端 →「导入学习库」
+2. 选择 `out/<slug>-<version>/` 这个**文件夹**（合集选 `.zip`）
+3. 题目、知识图谱与解析直接进入刷题页
+
+还没有 App：[aimcram.aimlocal.xyz](https://www.aimcram.aimlocal.xyz/)，macOS 与 Windows 都有安装包。
+
 ## 5. 作为 DSH 插件运行
 
 插件入口 [dsh-plugin/index.mjs](dsh-plugin/index.mjs) 注册四个工具：

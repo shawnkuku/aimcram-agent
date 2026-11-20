@@ -2,6 +2,7 @@
  * 运行配置：全部可通过环境变量覆盖，CLI 参数优先级最高。
  */
 
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -10,7 +11,13 @@ function num(value, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-export const VERSION = '1.0.0';
+/* 版本只认 package.json，避免两处手改不同步 */
+export const VERSION = JSON.parse(
+  fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+).version;
+
+/* 官网 / 桌面端下载入口：产物摘要里作为「下一步」引导 */
+export const APP_URL = 'https://www.aimcram.aimlocal.xyz/';
 
 export const DEFAULTS = {
   // LLM

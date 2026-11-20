@@ -28,7 +28,7 @@ import { runPipeline } from '../src/pipeline.mjs';
 import { verifyPack } from '../src/pack.mjs';
 import { buildCollection, verifyCollection, isCollection } from '../src/collection.mjs';
 import { HarnessLLM } from '../src/llm-harness.mjs';
-import { resolveConfig, VERSION, maskSecret } from '../src/config.mjs';
+import { resolveConfig, VERSION, APP_URL, maskSecret } from '../src/config.mjs';
 import { createReporter } from '../src/log.mjs';
 import { ocrCapability } from '../src/extract/image.mjs';
 import { AgentError, errorPayload } from '../src/errors.mjs';
@@ -333,6 +333,7 @@ const generate = {
         appFiles: result.appFiles
           ? { dataJs: result.appFiles.dataJs, kbJs: result.appFiles.kbJs }
           : null,
+        next: `把包目录导入 AimCram App 即可刷题（App →「导入学习库」→ 选文件夹，免解压）。App 下载：${APP_URL}`,
         paths: result.paths,
         progress: events.slice(-6)
       };
@@ -390,6 +391,7 @@ const bundle = {
         zip: result.zip,
         root: result.rootName,
         counts: c.counts,
+        next: `在 AimCram App 里「导入学习库」→ 选择合集 ZIP，即可按科目刷题。App 下载：${APP_URL}`,
         packs: c.packs.map((p) => ({
           slug: p.slug,
           version: p.version,

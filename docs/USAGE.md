@@ -190,6 +190,16 @@ node cli.mjs verify out/jiakao-1.0.0.zip --strict
 - 子包内容不改写，解包后仍可单独 `verify` / 导入；
 - 同名合集已存在时报 `LA015`，提升 `--version` 或加 `--force`。
 
+### 7.2 生成之后：导入 AimCram 刷题
+
+产物是可直接导入的学习库包，不需要解压或转换：
+
+1. 打开 AimCram 桌面端 →「导入学习库」；
+2. 选择 `out/<slug>-<version>/` 这个**文件夹**（合集选 `.zip`）；
+3. 题目、知识图谱与解析立刻出现在刷题页。
+
+还没有 App：[aimcram.aimlocal.xyz](https://www.aimcram.aimlocal.xyz/)，macOS 与 Windows 都有安装包。
+
 ## 第 8 步：作为 DeepSeek Harness 插件使用
 
 本包根目录就是合法 bundle 包（`package.json` 声明 `dsh.bundle.patch` + `cordis.patch.yml`），两种用法任选。
