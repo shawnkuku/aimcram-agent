@@ -26,17 +26,16 @@
 ## 2. 目录结构
 
 ```
-services/aimcram-agent/
+aimcram-agent/
+├── package.json               # npm 包声明 + DSH bundle 声明（dsh.bundle.patch）
+├── cordis.patch.yml           # bundle 自带 patch：插入本插件
 ├── cli.mjs                    # 命令行入口（generate / verify / unpack / doctor / eval）
 ├── dsh-plugin/
-│   ├── index.mjs              # DSH 插件：注册 4 个原生工具
-│   ├── package.json           # bundle 包声明（dsh.bundle.patch）
-│   ├── cordis.patch.yml       # bundle 自带 patch：插入本插件
-│   └── dsh.yml                # CLI 覆盖层示例（--patch）
+│   └── index.mjs              # DSH 插件：注册 4 个原生工具
 ├── samples/architecture-notes.md
 ├── src/
 │   ├── config.mjs             # 环境变量与默认值
-│   ├── errors.mjs             # LA001–LA015 错误目录
+│   ├── errors.mjs             # LA001–LA017 错误目录
 │   ├── extract/               # md/txt/html/pdf/docx/image 提取
 │   ├── web/                   # DeepSeek Search/Fetch 客户端、主题检索与抓取编排
 │   ├── llm.mjs                # DeepSeek 直连客户端（CLI / 无 Harness 环境）
@@ -45,7 +44,8 @@ services/aimcram-agent/
 │   ├── generate.mjs           # 大纲 → 题目 → kshare Markdown → kshare.mjs 严格校验
 │   ├── pack.mjs               # kshare-pack/v1 组包 / 校验 / 解包
 │   ├── pipeline.mjs           # 三模式流水线
-│   └── exports.mjs            # App 运行数据（data.js / kb.js）
+│   ├── exports.mjs            # App 运行数据（data.js / kb.js）
+│   └── vendor/                # 内置 kshare 校验器与 3 个导出转换器（零三方依赖）
 ├── tests/                     # 71 项自动化测试 + 提取质量评测
 └── docs/USAGE.md              # 分步使用文档
 ```
@@ -53,7 +53,6 @@ services/aimcram-agent/
 ## 3. 安装
 
 ```bash
-cd services/aimcram-agent
 npm install
 ```
 
@@ -155,34 +154,38 @@ jiakao-1.0.0/
 | `study_library_verify` | 校验单个包或合集（目录 / ZIP） |
 | `study_library_doctor` | 依赖、OCR、DeepSeek、抓取配置自检 |
 
-### 5.1 桌面版「插件」界面安装
+### 5.1 安装
 
-`dsh-plugin/` 是一个合法的 DSH bundle 包（`package.json` 声明 `dsh.bundle.patch`，`cordis.patch.yml` 负责插入自身），因此可以直接在桌面版安装：
+包根即插件包（`package.json` 声明 `dsh.bundle.patch`，[cordis.patch.yml](cordis.patch.yml) 负责插入自身），两种安装方式：
 
-1. 打开 **设置 → 插件 → 安装**。
-2. 填入**绝对路径**（相对路径会被判为“不是有效包”）：
-
-   ```
-   /Users/kuangjixiang/dev/aimcram/services/aimcram-agent/dsh-plugin
-   ```
-
-3. 确认后按提示重启 Harness，三个 `study_library_*` 工具即可在对话中使用。
-
-也可以在终端安装（需先退出 Harness）：
+**外部用户（npm 包名）**
 
 ```bash
-dsh plugin --profile desktop add /Users/kuangjixiang/dev/aimcram/services/aimcram-agent/dsh-plugin
+dsh plugin --profile desktop add @aimcram/agent
 ```
 
-### 5.2 CLI 覆盖层加载（免安装）
+或在桌面版 **设置 → 插件 → 安装** 里填 `@aimcram/agent`。
 
-[dsh-plugin/dsh.yml](dsh-plugin/dsh.yml) 中 `name` 为绝对路径，移动仓库后需同步修改：
+**本地开发（绝对路径）**
 
 ```bash
-npx -y @deepseek-ai/dsh --profile headless \
-  --patch ./dsh-plugin/dsh.yml \
-  "先运行 study_library_doctor，再用 study_library_generate 为主题「系统架构设计」生成学习库"
+dsh plugin --profile desktop add /path/to/aimcram-agent
 ```
+
+注意填的是**包根**目录（含 `package.json`），不是 `dsh-plugin/`。
+
+装完按提示重启 Harness，`study_library_*` 四个工具即可在对话中使用。
+
+### 5.2 不装插件，直接用 CLI
+
+插件与 CLI 共用同一套实现，CLI 下不依赖 Harness：
+
+```bash
+npx @aimcram/agent doctor
+npx @aimcram/agent generate --topic 系统架构设计 --source ./notes.md --out out
+```
+
+本仓库内开发时等价于 `node cli.mjs ...`。
 
 插件遵循 DSH 的 Cordis 插件契约：`export const name` / `export const inject = ['tools']` / `export function apply(ctx)`，通过 `ctx.tools.register(definition)` 注册带输出声明的原始工具定义，不引入额外依赖。
 

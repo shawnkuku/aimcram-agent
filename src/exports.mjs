@@ -1,7 +1,7 @@
 /**
  * 产物出口：App 运行数据（data.js / kb.js）与独立 Markdown 导出。
  *
- * 复用 services/tools 下已经过验证的转换器，避免出现第二套字段映射。
+ * 复用 src/vendor 下已经过验证的转换器，避免出现第二套字段映射。
  */
 
 import fs from 'node:fs';
@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { AgentError } from './errors.mjs';
 import { ensureDir } from './util.mjs';
 
-const TOOLS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../tools');
+const TOOLS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'vendor');
 
 function runTool(script, args, label) {
   const r = spawnSync(process.execPath, [path.join(TOOLS, script), ...args], {

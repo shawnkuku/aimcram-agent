@@ -480,7 +480,7 @@ const doctor = {
       }
     }
     return {
-      ok: Object.values(deps).every(Boolean) && fs.existsSync(path.resolve(HERE, '../../tools/kshare.mjs')),
+      ok: Object.values(deps).every(Boolean) && fs.existsSync(path.resolve(HERE, '../src/vendor/kshare.mjs')),
       version: VERSION,
       node: process.version,
       platform: process.platform,

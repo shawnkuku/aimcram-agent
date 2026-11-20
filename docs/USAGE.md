@@ -192,55 +192,45 @@ node cli.mjs verify out/jiakao-1.0.0.zip --strict
 
 ## 第 8 步：作为 DeepSeek Harness 插件使用
 
-`dsh-plugin/` 是合法 bundle 包（`package.json` + `cordis.patch.yml`），两种用法任选。
+本包根目录就是合法 bundle 包（`package.json` 声明 `dsh.bundle.patch` + `cordis.patch.yml`），两种用法任选。
 
-### 8.1 桌面版安装
+### 8.1 安装
 
-1. 打开**设置 → 插件 → 安装**。
-2. 填**绝对路径**（相对路径会报“请输入有效的包名或地址”）：
-
-   ```
-   /Users/kuangjixiang/dev/aimcram/services/aimcram-agent/dsh-plugin
-   ```
-
-3. 按提示重启 Harness，`study_library_*` 四个工具即可使用（生成时自动复用 Harness 当前所选模型）。
-
-终端安装等价命令（需先退出 Harness）：
+外部用户直接装 npm 包：
 
 ```bash
-dsh plugin --profile desktop add /Users/kuangjixiang/dev/aimcram/services/aimcram-agent/dsh-plugin
+dsh plugin --profile desktop add @aimcram/agent
 ```
 
-### 8.2 CLI 覆盖层（免安装）
+本地开发时换成包根的绝对路径（必须是含 `package.json` 的目录，不是 `dsh-plugin/`）：
 
-1. 确认插件路径：
+```bash
+dsh plugin --profile desktop add /path/to/aimcram-agent
+```
 
-   ```bash
-   ls dsh-plugin/index.mjs
-   ```
+桌面版也可以在**设置 → 插件 → 安装**里填包名或绝对路径，重启 Harness 后 `study_library_*` 四个工具即可使用（生成时自动复用 Harness 当前所选模型）。
 
-2. 编辑 [dsh-plugin/dsh.yml](../dsh-plugin/dsh.yml)，把 `name` 改成绝对路径（仓库移动后必须更新）。
+### 8.2 不装插件，直接用 CLI
 
-3. 启动 headless profile 并加载覆盖层：
+```bash
+npx @aimcram/agent doctor
+npx @aimcram/agent generate --topic "系统架构设计" --pages 6
+```
 
-   ```bash
-   npx -y @deepseek-ai/dsh --profile headless \
-     --patch ./dsh-plugin/dsh.yml \
-     "先运行 study_library_doctor，然后用 study_library_generate 为主题「系统架构设计」生成学习库"
-   ```
+本仓库内开发时用 `node cli.mjs ...` 等价替代。
 
-4. 可用工具与参数：
+### 8.3 工具参数
 
-   | 工具 | 关键参数 |
-   |---|---|
-   | `study_library_generate` | `topic` `sources` `mode` `seeds` `pages` `depth` `perSection` `outDir` `slug` `version` `mock` `emitAppDir` `force` |
-   | `study_library_bundle` | `paths` `outFile` `outDir` `name` `version` `title` `force` |
-   | `study_library_verify` | `path` `strict` `appVersion` |
-   | `study_library_doctor` | 无 |
+| 工具 | 关键参数 |
+|---|---|
+| `study_library_generate` | `topic` `sources` `mode` `seeds` `pages` `depth` `perSection` `outDir` `slug` `version` `mock` `emitAppDir` `force` |
+| `study_library_bundle` | `paths` `outFile` `outDir` `name` `version` `title` `force` |
+| `study_library_verify` | `path` `strict` `appVersion` |
+| `study_library_doctor` | 无 |
 
-   生成工具的返回值只包含结构化摘要（规模、来源、抓取、校验、路径），进度实时写入 stderr，避免大段正文占用模型上下文。
+生成工具的返回值只包含结构化摘要（规模、来源、抓取、校验、路径），进度实时写入 stderr，避免大段正文占用模型上下文。
 
-   工具参数里的相对路径（`sources` / `seeds` / `outDir` / `paths` / `path`）按当前会话工作目录解析；省略 `outDir` 时写到 `<会话工作目录>/out`。推理模型出现空输出或 max-tokens 截断时会自动重试，并在必要时退到分步大纲。
+工具参数里的相对路径（`sources` / `seeds` / `outDir` / `paths` / `path`）按当前会话工作目录解析；省略 `outDir` 时写到 `<会话工作目录>/out`。推理模型出现空输出或 max-tokens 截断时会自动重试，并在必要时退到分步大纲。
 
 ## 第 9 步：测试与质量评测
 

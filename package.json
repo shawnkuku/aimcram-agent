@@ -1,15 +1,43 @@
 {
   "name": "@aimcram/agent",
   "version": "1.0.0",
-  "private": true,
   "description": "基于 DeepSeek Harness 的智能学习库生成 Agent（三模式：指定源 / 自主爬取 / 混合）",
   "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
+  "main": "./dsh-plugin/index.mjs",
   "bin": {
     "aimcram-agent": "./cli.mjs"
   },
+  "exports": {
+    ".": "./dsh-plugin/index.mjs",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "cli.mjs",
+    "src/",
+    "dsh-plugin/index.mjs",
+    "cordis.patch.yml",
+    "samples/",
+    "docs/"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.0"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "aimcram",
+    "study-library",
+    "kShare",
+    "学习库"
+  ],
+  "license": "MIT",
   "scripts": {
     "start": "node cli.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",

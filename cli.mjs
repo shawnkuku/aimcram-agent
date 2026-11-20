@@ -368,7 +368,7 @@ async function cmdDoctor(opts) {
       maxDepth: config.maxDepth,
       crawlTimeoutMs: config.crawlTimeoutMs
     },
-    kshare: fs.existsSync(path.resolve(HERE, '../tools/kshare.mjs'))
+    kshare: fs.existsSync(path.resolve(HERE, 'src/vendor/kshare.mjs'))
   };
   const ok = Object.values(deps).every(Boolean) && info.kshare;
   info.ok = ok;
@@ -377,7 +377,7 @@ async function cmdDoctor(opts) {
     const lines = [
       `aimcram-agent v${VERSION} · node ${process.version} · ${process.platform}`,
       `依赖        ${Object.entries(deps).map(([k, v]) => `${k}${v ? '✓' : '✗'}`).join('  ')}`,
-      `kshare      ${info.kshare ? '✓ 已找到 services/tools/kshare.mjs' : '✗ 缺失'}`,
+      `kshare      ${info.kshare ? '✓ 已找到 src/vendor/kshare.mjs' : '✗ 缺失'}`,
       `OCR         ${info.ocr.vision ? 'macOS Vision ✓' : info.ocr.tesseract ? 'tesseract ✓' : '✗ 不可用'}`,
       `DeepSeek    ${info.llm.apiKey ? `已配置 ${info.llm.apiKey}` : '未配置（可用 --mock 离线生成）'}`,
       `抓取        DeepSeek Search/Fetch · 最多 ${info.crawl.maxPages} 页 · 超时 ${info.crawl.crawlTimeoutMs}ms`

@@ -12,7 +12,7 @@ import { renderLibraryMarkdown, renderPlateSvg, sourceDigest, generateCases, gen
 import { ensureDir } from './util.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const KSHARE = path.resolve(HERE, '../../tools/kshare.mjs');
+const KSHARE = path.resolve(HERE, 'vendor/kshare.mjs');
 
 const TYPE_MAP = {
   判断: 'judge',

@@ -2,8 +2,8 @@
 #
 # 作为 bundle 安装后，本层由 DSH 自动叠加到 profile，无需手工编辑
 # ~/.dsh/profiles/<profile>/cordis.patch.yml；下面的 name 是包名本身，
-# 由 profile 的 node_modules 解析到本包的 index.mjs。
+# 由 profile 的 node_modules 解析到本包的 index.mjs（package.json 的 main）。
 
 - insert:
     - id: aimcram-agent
-      name: 'aimcram-agent'
+      name: '@aimcram/agent'

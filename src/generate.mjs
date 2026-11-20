@@ -2,7 +2,7 @@
  * 学习库生成：大纲 → 知识点/关联 → 题目 → kshare Markdown → 官方校验 → 生成 JSON
  *
  * 关键取舍：不自己发明内容格式，而是渲染成 services/README.md 定义的 kshare Markdown，
- * 再交给 services/tools/kshare.mjs（--strict）产出 content/library.json。
+ * 再交给 src/vendor/kshare.mjs（--strict）产出 content/library.json。
  * 这样题目 id、字段裁剪、错误码与现有 App 完全一致，天然满足「可直接导入」。
  */
 
@@ -16,7 +16,7 @@ import {
 } from './util.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const KSHARE = path.resolve(HERE, '../../tools/kshare.mjs');
+const KSHARE = path.resolve(HERE, 'vendor/kshare.mjs');
 const OUTLINE_SYSTEM = `你是资深课程设计专家，负责把零散资料整理成可直接学习的知识体系。
 只输出合法 JSON，不要解释、不要 Markdown 代码围栏。JSON 结构：
 {
