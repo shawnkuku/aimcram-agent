@@ -121,7 +121,7 @@ export async function extractFile(file, opts = {}) {
   }
 
   if (type === 'html') {
-    const r = extractArticle(buffer.toString('utf8'), { url: '', fallbackTitle: baseTitle });
+    const r = await extractArticle(buffer.toString('utf8'), { url: '', fallbackTitle: baseTitle });
     return buildSource({
       id: opts.id, kind: 'file', type: 'html', title: r.title || baseTitle, text: r.text, file: abs,
       meta: { ext: path.extname(abs).toLowerCase(), bytes: stat.size, method: r.method },
@@ -232,7 +232,7 @@ export async function extractRemoteSource({
     });
   }
   if (type === 'html') {
-    const r = extractArticle(buffer.toString('utf8'), { url: abs, fallbackTitle: baseTitle });
+    const r = await extractArticle(buffer.toString('utf8'), { url: abs, fallbackTitle: baseTitle });
     return buildSource({
       id, kind: 'url', type: 'html', title: r.title || baseTitle, text: r.text, url: abs,
       meta: { ...meta, method: r.method }, quality: { mode: 'heuristic', confidence: null },

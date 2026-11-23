@@ -6,10 +6,26 @@
  * 两条路径都会去掉 script/style/nav/footer 等噪音，并保留标题、站点、发布时间等元数据。
  */
 
-import { JSDOM, VirtualConsole } from 'jsdom';
-import { Readability } from '@mozilla/readability';
 import { load } from 'cheerio';
 import { textStats, stripHtmlText } from '../util.mjs';
+
+/* jsdom / Readability 延迟加载：两者依赖 whatwg-url → tr46，
+ * 而 tr46 内部 require('punycode/')（带尾斜杠）。DSH 的模块拦截解析不了这种
+ * 说明符，顶层静态导入会让整个插件激活失败；因此改为首次解析网页时再加载，
+ * 加载失败就自动降级到下方的容器打分（cheerio）路径。 */
+let readabilityLib;
+function loadReadability() {
+  if (!readabilityLib) {
+    readabilityLib = Promise.all([import('jsdom'), import('@mozilla/readability')])
+      .then(([jsdom, readability]) => ({
+        JSDOM: jsdom.JSDOM,
+        VirtualConsole: jsdom.VirtualConsole,
+        Readability: readability.Readability
+      }))
+      .catch(() => null);
+  }
+  return readabilityLib;
+}
 
 const NOISE_SELECTORS = [
   'script', 'style', 'noscript', 'iframe', 'svg', 'canvas', 'form',
@@ -41,8 +57,9 @@ function metaContent($, names) {
   return '';
 }
 
-/** Readability 主路径；失败返回 null。 */
-function viaReadability(html, url) {
+/** Readability 主路径；jsdom 不可用或解析失败返回 null。 */
+function viaReadability(html, url, lib) {
+  const { JSDOM, VirtualConsole, Readability } = lib;
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', () => {});
   const dom = new JSDOM(html, { url: url || 'https://example.invalid/', virtualConsole });
@@ -122,17 +139,22 @@ function viaScoring(html, url) {
  * @param {string} html
  * @param {{url?: string, fallbackTitle?: string}} [opts]
  */
-export function extractArticle(html, opts = {}) {
+export async function extractArticle(html, opts = {}) {
   const { url = '', fallbackTitle = '' } = opts;
   if (!html || typeof html !== 'string') {
     return { title: fallbackTitle, text: '', method: 'none', stats: textStats(''), warnings: ['空 HTML'] };
   }
   let article = null;
   let warning = null;
-  try {
-    article = viaReadability(html, url);
-  } catch (err) {
-    warning = `Readability 失败：${err.message}`;
+  const lib = await loadReadability();
+  if (!lib) {
+    warning = 'jsdom 不可用（当前宿主无法解析其依赖），已降级容器打分';
+  } else {
+    try {
+      article = viaReadability(html, url, lib);
+    } catch (err) {
+      warning = `Readability 失败：${err.message}`;
+    }
   }
   const fallback = viaScoring(html, url);
   if (!article || textStats(article.text).meaningful < 160) {
