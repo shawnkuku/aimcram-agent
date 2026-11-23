@@ -5,6 +5,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { makeTempDir, CLI } from './helpers.mjs';
 
+const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+
 function run(args, opts = {}) {
   return spawnSync(process.execPath, [CLI, ...args], {
     encoding: 'utf8',
@@ -103,7 +105,7 @@ test('CLI：参数错误与缺失来源给出非零退出码', () => {
 test('CLI：doctor 自检可执行', () => {
   const doctor = run(['doctor', '--json']);
   const info = JSON.parse(doctor.stdout);
-  assert.equal(info.version, '1.0.0');
+  assert.equal(info.version, VERSION);
   assert.equal(info.kshare, true);
   assert.ok(info.deps['pdfjs-dist']);
 });
