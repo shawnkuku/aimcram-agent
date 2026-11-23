@@ -31,7 +31,7 @@ aimcram-agent/
 ├── cordis.patch.yml           # bundle 自带 patch：插入本插件
 ├── cli.mjs                    # 命令行入口（generate / verify / unpack / doctor / eval）
 ├── dsh-plugin/
-│   └── index.mjs              # DSH 插件：注册 4 个原生工具
+│   └── index.mjs              # DSH 插件：注册 5 个原生工具
 ├── samples/architecture-notes.md
 ├── src/
 │   ├── config.mjs             # 环境变量与默认值
@@ -143,19 +143,18 @@ jiakao-1.0.0/
 
 合集不改写子包内容，解包后每个子包仍可单独校验、导入；`verify` 会自动识别合集并逐包校验。
 
-### 4.2 生成之后：导入 AimCram 刷题
+### 4.2 导入 AimCram（用户主动要求时）
 
-产物就是可直接导入的学习库包，不需要解压或格式转换：
+产物就是可直接导入的学习库包，不需要解压或格式转换。Agent 不会主动提示导入；只有在用户明确要求时，才调用 `aimcram_import` 或手动导入：
 
-1. 打开 AimCram 桌面端 →「导入学习库」
-2. 选择 `out/<slug>-<version>/` 这个**文件夹**（合集选 `.zip`）
-3. 题目、知识图谱与解析直接进入刷题页
+- 对话里说「把这个学习库导入 AimCram」，插件通过 `aimcram://import?path=<包目录>` 唤起 App 并导入
+- 也可以手动：打开 AimCram →「导入学习库」→ 选 `out/<slug>-<version>/` 文件夹（合集选 `.zip`）
 
-还没有 App：[aimcram.aimlocal.xyz](https://www.aimcram.aimlocal.xyz/)，macOS 与 Windows 都有安装包。
+检测不到 App 时，工具只返回官网地址：[aimcram.aimlocal.xyz](https://www.aimcram.aimlocal.xyz/)（macOS 与 Windows 都有安装包）。
 
 ## 5. 作为 DSH 插件运行
 
-插件入口 [dsh-plugin/index.mjs](dsh-plugin/index.mjs) 注册四个工具：
+插件入口 [dsh-plugin/index.mjs](dsh-plugin/index.mjs) 注册五个工具：
 
 | 工具 | 作用 |
 |---|---|
@@ -163,6 +162,7 @@ jiakao-1.0.0/
 | `study_library_bundle` | 多个学习库包 → 一个 ZIP 合集 |
 | `study_library_verify` | 校验单个包或合集（目录 / ZIP） |
 | `study_library_doctor` | 依赖、OCR、DeepSeek、抓取配置自检 |
+| `aimcram_import` | 用户明确要求时，唤起 AimCram 导入包；未安装则返回官网地址 |
 
 ### 5.1 安装
 
@@ -184,7 +184,7 @@ dsh plugin --profile desktop add /path/to/aimcram-agent
 
 注意填的是**包根**目录（含 `package.json`），不是 `dsh-plugin/`。
 
-装完按提示重启 Harness，`study_library_*` 四个工具即可在对话中使用。
+装完按提示重启 Harness，五个工具即可在对话中使用（`aimcram_import` 需要 AimCram 桌面端支持 `aimcram://` 协议）。
 
 ### 5.2 不装插件，直接用 CLI
 

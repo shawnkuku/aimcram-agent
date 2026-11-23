@@ -24,12 +24,13 @@ function mount(services = {}) {
   return tools;
 }
 
-test('DSH 插件契约：导出 name / inject / apply 并注册四个工具', () => {
+test('DSH 插件契约：导出 name / inject / apply 并注册五个工具', () => {
   assert.equal(plugin.name, 'aimcram-agent');
   assert.deepEqual(plugin.inject, ['tools']);
   const tools = mount();
   assert.deepEqual([...tools.keys()].sort(), [
-    'study_library_bundle', 'study_library_doctor', 'study_library_generate', 'study_library_verify'
+    'aimcram_import', 'study_library_bundle', 'study_library_doctor',
+    'study_library_generate', 'study_library_verify'
   ]);
   for (const def of tools.values()) {
     assert.ok(def.description.length > 10);

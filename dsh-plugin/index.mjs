@@ -31,6 +31,7 @@ import { HarnessLLM } from '../src/llm-harness.mjs';
 import { resolveConfig, VERSION, APP_URL, maskSecret } from '../src/config.mjs';
 import { createReporter } from '../src/log.mjs';
 import { ocrCapability } from '../src/extract/image.mjs';
+import { detectApp, importUrl, openUrl } from '../src/app.mjs';
 import { AgentError, errorPayload } from '../src/errors.mjs';
 
 export const name = 'aimcram-agent';
@@ -222,7 +223,7 @@ function harnessServices() {
 const generate = {
   name: 'study_library_generate',
   description:
-    '生成可直接导入 AimCram 的学习库包（kshare-pack/v1）。三种模式：sources=用户指定的本地文档/图片/网页；'
+    '生成 AimCram 学习库包（kshare-pack/v1）。三种模式：sources=用户指定的本地文档/图片/网页；'
     + 'web=仅给主题，经 DeepSeek Search/Fetch 联网检索抓取；combined=两者结合。默认复用 Harness 当前所选模型生成；'
     + '返回包目录、ZIP、报告路径与规模统计。',
   parameters: {
@@ -333,7 +334,6 @@ const generate = {
         appFiles: result.appFiles
           ? { dataJs: result.appFiles.dataJs, kbJs: result.appFiles.kbJs }
           : null,
-        next: `把包目录导入 AimCram App 即可刷题（App →「导入学习库」→ 选文件夹，免解压）。App 下载：${APP_URL}`,
         paths: result.paths,
         progress: events.slice(-6)
       };
@@ -347,7 +347,7 @@ const bundle = {
   name: 'study_library_bundle',
   description:
     '把多个已生成的学习库包（目录或 ZIP）打成一个 ZIP 合集（kshare-collection/v1），'
-    + '分发时只需要传一个文件。合集不改写子包，解包后每个子包仍可单独导入。',
+    + '分发时只需要传一个文件；合集只做打包，不改写子包内容。',
   parameters: {
     type: 'object',
     properties: {
@@ -391,7 +391,6 @@ const bundle = {
         zip: result.zip,
         root: result.rootName,
         counts: c.counts,
-        next: `在 AimCram App 里「导入学习库」→ 选择合集 ZIP，即可按科目刷题。App 下载：${APP_URL}`,
         packs: c.packs.map((p) => ({
           slug: p.slug,
           version: p.version,
@@ -514,9 +513,70 @@ const doctor = {
   }
 };
 
+/**
+ * 把学习库导入 AimCram 桌面 App。
+ * 只在用户明确要求“导入 AimCram / 用 App 打开”时调用，不主动推荐；
+ * App 未安装时只返回官网地址，不尝试其它打开方式。
+ */
+const importPack = {
+  name: 'aimcram_import',
+  description:
+    '把本地学习库包（目录或 .json/.jsonl 文件）导入 AimCram 桌面 App，通过 aimcram:// 协议唤起。'
+    + '仅在用户明确要求把学习库导入 AimCram 时使用；未安装 App 时返回官网下载地址。',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: '学习库包目录（含 content/library.json）或单个 .json/.jsonl 文件' }
+    },
+    required: ['path'],
+    additionalProperties: false
+  },
+  output: {
+    schema: OUTPUT_SCHEMA,
+    render: (_args, value) => [textResult(value)]
+  },
+  async execute(args = {}, exec = {}) {
+    if (!args.path) throw new Error('[LA012] 需要 path 参数：学习库包目录或 .json/.jsonl 文件');
+    const target = resolveUserPath(args.path, sessionCwd(exec));
+    if (!fs.existsSync(target)) throw new Error('[LA012] 路径不存在：' + target);
+    if (fs.statSync(target).isDirectory()) {
+      if (!fs.existsSync(path.join(target, 'content', 'library.json'))) {
+        throw new Error('[LA012] 目录里没有 content/library.json，不是可导入的学习库包');
+      }
+    } else if (!/\.(json|jsonl)$/i.test(target)) {
+      throw new Error('[LA012] 只支持学习库包目录或 .json/.jsonl 文件');
+    }
+
+    const app = detectApp();
+    if (!app.installed) {
+      return {
+        ok: false,
+        installed: false,
+        download: APP_URL,
+        message: '未检测到 AimCram App，可从官网下载安装后再导入'
+      };
+    }
+
+    const protocol = importUrl(target);
+    try {
+      await openUrl(protocol);
+    } catch (err) {
+      throw new Error('无法唤起 AimCram：' + (err?.message || err));
+    }
+    return {
+      ok: true,
+      installed: true,
+      app: app.path,
+      path: target,
+      protocol,
+      message: '已打开 AimCram 并请求导入「' + path.basename(target) + '」'
+    };
+  }
+};
+
 export function apply(ctx) {
   host = ctx;
-  for (const tool of [generate, bundle, verify, doctor]) {
+  for (const tool of [generate, bundle, verify, doctor, importPack]) {
     try {
       ctx.tools.register(tool);
     } catch (err) {
