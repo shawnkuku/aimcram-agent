@@ -517,6 +517,13 @@ const doctor = {
 export function apply(ctx) {
   host = ctx;
   for (const tool of [generate, bundle, verify, doctor]) {
-    ctx.tools.register(tool);
+    try {
+      ctx.tools.register(tool);
+    } catch (err) {
+      // 与 archprep-learning-agent 这类同功能旧插件共存时，后加载的一方会因工具重名注册失败。
+      // 跳过重名工具，避免整个插件因单个冲突而不激活。
+      if (!/already registered/i.test(err?.message || '')) throw err;
+      console.warn(`[aimcram-agent] 工具 ${tool.name} 已被其他插件注册，跳过`);
+    }
   }
 }

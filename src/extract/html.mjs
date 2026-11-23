@@ -3,28 +3,26 @@
  *
  * 主路径：@mozilla/readability（与 Firefox 阅读模式同源）。
  * 兜底：Readability 失败或正文过短时，改用容器打分（文本量、标点密度、链接密度）。
- * 两条路径都会去掉 script/style/nav/footer 等噪音，并保留标题、站点、发布时间等元数据。
+ * 再兜底：DOM 相关依赖都加载不了时，用纯文本清洗，保证抓取流程不中断。
+ * 各路径都会去掉 script/style/nav/footer 等噪音，并保留标题、站点、发布时间等元数据。
+ *
+ * 依赖按需加载：部分插件宿主（如 DSH）会拦截/改写模块解析，
+ * 顶层静态导入 jsdom / cheerio 会牵连 tr46 的 require('punycode/') 等写法，
+ * 导致整个插件激活失败；这里统一改成首次解析网页时再加载。
  */
 
-import { load } from 'cheerio';
 import { textStats, stripHtmlText } from '../util.mjs';
 
-/* jsdom / Readability 延迟加载：两者依赖 whatwg-url → tr46，
- * 而 tr46 内部 require('punycode/')（带尾斜杠）。DSH 的模块拦截解析不了这种
- * 说明符，顶层静态导入会让整个插件激活失败；因此改为首次解析网页时再加载，
- * 加载失败就自动降级到下方的容器打分（cheerio）路径。 */
-let readabilityLib;
-function loadReadability() {
-  if (!readabilityLib) {
-    readabilityLib = Promise.all([import('jsdom'), import('@mozilla/readability')])
-      .then(([jsdom, readability]) => ({
-        JSDOM: jsdom.JSDOM,
-        VirtualConsole: jsdom.VirtualConsole,
-        Readability: readability.Readability
-      }))
-      .catch(() => null);
+let domLibs;
+function loadDomLibs() {
+  if (!domLibs) {
+    domLibs = Promise.all([
+      import('jsdom').then((m) => ({ JSDOM: m.JSDOM, VirtualConsole: m.VirtualConsole })).catch(() => null),
+      import('@mozilla/readability').then((m) => m.Readability).catch(() => null),
+      import('cheerio').then((m) => m.load).catch(() => null)
+    ]).then(([jsdom, Readability, cheerio]) => ({ jsdom, Readability, cheerio }));
   }
-  return readabilityLib;
+  return domLibs;
 }
 
 const NOISE_SELECTORS = [
@@ -47,19 +45,33 @@ function cleanText(text) {
     .trim();
 }
 
-function metaContent($, names) {
+/* 不依赖 DOM 的 meta 读取（readability 主路径也会用到） */
+function metaMap(html) {
+  const map = {};
+  const re = /<meta\b[^>]*>/gi;
+  for (const tag of html.match(re) || []) {
+    const key = /(?:property|name)\s*=\s*["']([^"']+)["']/i.exec(tag);
+    const val = /content\s*=\s*["']([^"']*)["']/i.exec(tag);
+    if (key && val) {
+      const k = key[1].toLowerCase();
+      if (!(k in map)) map[k] = val[1];
+    }
+  }
+  return map;
+}
+
+function metaContent(html, names) {
+  const map = metaMap(html);
   for (const name of names) {
-    const v =
-      $(`meta[property="${name}"]`).attr('content') ||
-      $(`meta[name="${name}"]`).attr('content');
+    const v = map[name.toLowerCase()];
     if (v && String(v).trim()) return String(v).trim();
   }
   return '';
 }
 
-/** Readability 主路径；jsdom 不可用或解析失败返回 null。 */
-function viaReadability(html, url, lib) {
-  const { JSDOM, VirtualConsole, Readability } = lib;
+/** Readability 主路径；jsdom / Readability 不可用或解析失败返回 null。 */
+function viaReadability(html, url, jsdom, Readability) {
+  const { JSDOM, VirtualConsole } = jsdom;
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', () => {});
   const dom = new JSDOM(html, { url: url || 'https://example.invalid/', virtualConsole });
@@ -76,22 +88,22 @@ function viaReadability(html, url, lib) {
     byline: cleanText(article.byline || ''),
     siteName: cleanText(article.siteName || ''),
     excerpt: cleanText(article.excerpt || ''),
-    publishedTime: article.publishedTime || metaContent(load(html), ['article:published_time', 'date', 'pubdate']),
+    publishedTime: article.publishedTime || metaContent(html, ['article:published_time', 'date', 'pubdate']),
     text,
     method: 'readability',
     language: article.lang || doc.documentElement?.lang || ''
   };
 }
 
-/** 容器打分兜底。 */
-function viaScoring(html, url) {
+/** 容器打分兜底（需要 cheerio）。 */
+function viaScoring(html, url, load) {
   const $ = load(html);
   const meta = {
-    title: cleanText($('title').first().text() || metaContent($, ['og:title'])),
-    byline: cleanText(metaContent($, ['author', 'article:author'])),
-    siteName: cleanText(metaContent($, ['og:site_name'])),
-    excerpt: cleanText(metaContent($, ['description', 'og:description'])),
-    publishedTime: metaContent($, ['article:published_time', 'date', 'pubdate'])
+    title: cleanText($('title').first().text() || metaContent(html, ['og:title'])),
+    byline: cleanText(metaContent(html, ['author', 'article:author'])),
+    siteName: cleanText(metaContent(html, ['og:site_name'])),
+    excerpt: cleanText(metaContent(html, ['description', 'og:description'])),
+    publishedTime: metaContent(html, ['article:published_time', 'date', 'pubdate'])
   };
   NOISE_SELECTORS.forEach((sel) => $(sel).remove());
 
@@ -135,6 +147,30 @@ function viaScoring(html, url) {
   return { ...meta, text, method: 'scoring', language: $('html').attr('lang') || '' };
 }
 
+/** 纯文本兜底：没有任何 DOM 库可用时，按标签切块清洗。 */
+function viaPlainHtml(html) {
+  const titleTag = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
+  const body = html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(script|style|noscript|svg|iframe)\b[\s\S]*?<\/\1>/gi, '');
+  const markdownish = body
+    .replace(/<h([12])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (_, __, t) => `\n\n## ${stripHtmlText(t)}\n\n`)
+    .replace(/<h([34])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (_, __, t) => `\n\n### ${stripHtmlText(t)}\n\n`)
+    .replace(/<li\b[^>]*>([\s\S]*?)<\/li>/gi, (_, t) => `\n- ${stripHtmlText(t)}`)
+    .replace(/<(p|div|section|article|tr|br)\b[^>]*>/gi, '\n')
+    .replace(/<\/(p|div|section|article|tr|table|ul|ol|blockquote)>/gi, '\n');
+  return {
+    title: cleanText(titleTag ? stripHtmlText(titleTag[1]) : ''),
+    byline: cleanText(metaContent(html, ['author', 'article:author'])),
+    siteName: cleanText(metaContent(html, ['og:site_name'])),
+    excerpt: cleanText(metaContent(html, ['description', 'og:description'])),
+    publishedTime: metaContent(html, ['article:published_time', 'date', 'pubdate']),
+    text: cleanText(stripHtmlText(markdownish)),
+    method: 'plain',
+    language: ''
+  };
+}
+
 /**
  * @param {string} html
  * @param {{url?: string, fallbackTitle?: string}} [opts]
@@ -144,44 +180,56 @@ export async function extractArticle(html, opts = {}) {
   if (!html || typeof html !== 'string') {
     return { title: fallbackTitle, text: '', method: 'none', stats: textStats(''), warnings: ['空 HTML'] };
   }
+  const libs = await loadDomLibs();
   let article = null;
-  let warning = null;
-  const lib = await loadReadability();
-  if (!lib) {
-    warning = 'jsdom 不可用（当前宿主无法解析其依赖），已降级容器打分';
-  } else {
+  const warnings = [];
+  if (libs.jsdom && libs.Readability) {
     try {
-      article = viaReadability(html, url, lib);
+      article = viaReadability(html, url, libs.jsdom, libs.Readability);
     } catch (err) {
-      warning = `Readability 失败：${err.message}`;
+      warnings.push(`Readability 失败：${err.message}`);
+    }
+  } else {
+    warnings.push('Readability 不可用，已降级容器打分');
+  }
+
+  let fallback = null;
+  if (libs.cheerio) {
+    try {
+      fallback = viaScoring(html, url, libs.cheerio);
+    } catch (err) {
+      warnings.push(`容器打分失败：${err.message}`);
     }
   }
-  const fallback = viaScoring(html, url);
+  if (!fallback) {
+    fallback = viaPlainHtml(html);
+    warnings.push('DOM 解析不可用，已降级纯文本清洗');
+  }
+
   if (!article || textStats(article.text).meaningful < 160) {
     if (fallback.text) {
       article = {
         ...fallback,
-        method: article ? 'scoring(short-readability)' : 'scoring'
+        method: article ? 'scoring(short-readability)' : fallback.method
       };
-      if (!warning) warning = 'Readability 正文过短，已回退容器打分';
+      warnings.push('Readability 正文过短，已回退兜底提取');
     }
   }
-  if (!article) article = { ...fallback, method: 'scoring' };
+  if (!article) article = fallback;
   if (fallbackTitle && !article.title) article.title = fallbackTitle;
   article.text = cleanText(article.text);
   article.stats = textStats(article.text);
-  article.warnings = warning ? [warning] : [];
+  article.warnings = warnings;
   return article;
 }
 
 /** 提取可继续抓取的站内链接。 */
-export function extractLinks(html, baseUrl, { sameHostOnly = true, limit = 40 } = {}) {
-  const $ = load(html);
+export async function extractLinks(html, baseUrl, { sameHostOnly = true, limit = 40 } = {}) {
+  const libs = await loadDomLibs();
   const base = new URL(baseUrl);
   const seen = new Set();
   const out = [];
-  $('a[href]').each((_, el) => {
-    const href = $(el).attr('href');
+  const push = (href, label) => {
     if (!href) return;
     if (/^(#|javascript:|mailto:|tel:)/i.test(href)) return;
     let abs;
@@ -197,9 +245,17 @@ export function extractLinks(html, baseUrl, { sameHostOnly = true, limit = 40 } 
     const key = abs.toString();
     if (seen.has(key)) return;
     seen.add(key);
-    const label = cleanText($(el).text());
-    out.push({ url: key, label });
-  });
+    out.push({ url: key, label: cleanText(label) });
+  };
+
+  if (libs.cheerio) {
+    const $ = libs.cheerio(html);
+    $('a[href]').each((_, el) => push($(el).attr('href'), $(el).text()));
+  } else {
+    const re = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+    let m;
+    while ((m = re.exec(html))) push(m[1], stripHtmlText(m[2]));
+  }
   return out.slice(0, limit);
 }
 
