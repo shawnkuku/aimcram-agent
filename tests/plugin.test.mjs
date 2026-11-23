@@ -7,6 +7,7 @@ import * as plugin from '../dsh-plugin/index.mjs';
 import { makeTempDir } from './helpers.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 const SAMPLE = path.join(ROOT, 'samples/architecture-notes.md');
 
 function mount(services = {}) {
@@ -80,7 +81,7 @@ test('DSH 工具：generate → verify → doctor', async (t) => {
   assert.equal(collectionReport.packs.length, 1);
 
   const doctor = await tools.get('study_library_doctor').execute();
-  assert.equal(doctor.version, '1.0.0');
+  assert.equal(doctor.version, VERSION);
   assert.equal(doctor.deps['pdfjs-dist'], true);
   assert.equal(doctor.crawl.provider, 'deepseek');
 
