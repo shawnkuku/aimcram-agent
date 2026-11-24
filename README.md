@@ -31,7 +31,7 @@ aimcram-agent/
 ├── cordis.patch.yml           # bundle 自带 patch：插入本插件
 ├── cli.mjs                    # 命令行入口（generate / verify / unpack / doctor / eval）
 ├── dsh-plugin/
-│   └── index.mjs              # DSH 插件：注册 5 个原生工具
+│   └── index.mjs              # DSH 插件：注册 5 个原生工具与 /aimcram 命令
 ├── samples/architecture-notes.md
 ├── src/
 │   ├── config.mjs             # 环境变量与默认值
@@ -163,6 +163,8 @@ jiakao-1.0.0/
 | `study_library_verify` | 校验单个包或合集（目录 / ZIP） |
 | `study_library_doctor` | 依赖、OCR、DeepSeek、抓取配置自检 |
 | `aimcram_import` | 用户明确要求时，唤起 AimCram 导入包；未安装则返回官网地址 |
+
+另注册斜杠命令 `/aimcram <主题>`：在对话框输入后直接按联网模式生成学习库，产物写到当前会话工作目录的 `out/`，不再弹权限确认。
 
 ### 5.1 安装
 

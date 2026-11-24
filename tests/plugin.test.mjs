@@ -39,6 +39,21 @@ test('DSH 插件契约：导出 name / inject / apply 并注册五个工具', ()
   }
 });
 
+test('DSH 命令：注册 /aimcram 并在空输入时提示用法', async () => {
+  const commands = [];
+  plugin.apply({
+    tools: { register() {} },
+    commands: { register(definition) { commands.push(definition); } },
+    get: () => undefined
+  });
+  const cmd = commands.find((item) => item.name === 'aimcram');
+  assert.ok(cmd, '应注册 /aimcram 命令');
+  assert.deepEqual(cmd.input, { hint: '<主题>' });
+  const empty = await cmd.handler({ rawInput: '   ' });
+  assert.equal(empty.kind, 'error');
+  assert.match(empty.text, /用法/);
+});
+
 test('DSH 工具：generate → verify → doctor', async (t) => {
   const dir = makeTempDir('la-dsh-');
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

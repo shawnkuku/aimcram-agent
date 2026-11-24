@@ -194,6 +194,8 @@ function progressReporter(events) {
  *   unavailable）按「未授权」处理并抛 LA017，让模型看到可重试的错误而不是静默失败。
  */
 async function requireApproval(exec, toolName, reason) {
+  // 斜杠命令由用户主动输入，语义上已授权，不再弹权限提示
+  if (exec?.skipApproval) return;
   const approval = host?.get?.('approval');
   if (!approval || typeof approval.request !== 'function') return;
   const outcome = await approval.request({
@@ -574,6 +576,65 @@ const importPack = {
   }
 };
 
+/**
+ * 斜杠命令：/aimcram <主题>
+ * 等价于生成工具的联网模式，由用户主动输入，视为已授权，不再弹权限提示。
+ */
+const aimcramCommand = {
+  name: 'aimcram',
+  description: '用 AimCram Agent 生成学习库',
+  input: { hint: '<主题>' },
+  async handler(invocation = {}) {
+    const topic = String(invocation.rawInput || '').trim();
+    if (!topic) {
+      return { kind: 'error', text: '用法：/aimcram <主题>，例如 /aimcram 系统架构设计' };
+    }
+    const exec = {
+      agent: invocation.agent,
+      callId: invocation.commandId,
+      signal: invocation.signal,
+      skipApproval: true
+    };
+    try {
+      const result = await generate.execute({ topic, mode: 'auto' }, exec);
+      const stats = result.stats || {};
+      const lines = [
+        `已生成「${result.topic || topic}」（${result.mode || 'web'}）`,
+        `章节 ${stats.chapters ?? '-'} · 小节 ${stats.sections ?? '-'} · 题目 ${stats.questions ?? '-'}`,
+        `目录：${result.paths?.dir || ''}`
+      ];
+      if (result.verification && result.verification.ok === false) {
+        lines.push(`校验：${result.verification.errors} 个错误`);
+      }
+      return { kind: 'success', text: lines.join('\n') };
+    } catch (err) {
+      return { kind: 'error', text: err?.message || String(err) };
+    }
+  }
+};
+
+/** commands 服务由桌面端提供，插件加载时可能尚未就绪，故允许延迟注册。 */
+function registerCommand(ctx) {
+  const register = (scope) => {
+    if (!scope?.commands || typeof scope.commands.register !== 'function') return false;
+    try {
+      scope.commands.register(aimcramCommand);
+      return true;
+    } catch (err) {
+      console.warn(`[aimcram-agent] /aimcram 注册失败：${err?.message || err}`);
+      return false;
+    }
+  };
+  if (register(ctx)) return;
+  if (typeof ctx.inject === 'function') {
+    try {
+      ctx.inject(['commands'], (scope) => register(scope));
+    } catch (err) {
+      console.warn(`[aimcram-agent] 等待 commands 服务失败：${err?.message || err}`);
+    }
+  }
+}
+
 export function apply(ctx) {
   host = ctx;
   for (const tool of [generate, bundle, verify, doctor, importPack]) {
@@ -586,4 +647,5 @@ export function apply(ctx) {
       console.warn(`[aimcram-agent] 工具 ${tool.name} 已被其他插件注册，跳过`);
     }
   }
+  registerCommand(ctx);
 }
