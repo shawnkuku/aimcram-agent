@@ -54,6 +54,20 @@ test('DSH 命令：注册 /aimcram 并在空输入时提示用法', async () => 
   assert.match(empty.text, /用法/);
 });
 
+test('DSH 插件：没有 commands 服务（无头）时仍能正常激活', () => {
+  const ctx = {
+    tools: { register() {} },
+    get: () => undefined,
+    inject() {}
+  };
+  Object.defineProperty(ctx, 'commands', {
+    get() {
+      throw new Error('cannot get property "commands" without inject');
+    }
+  });
+  assert.doesNotThrow(() => plugin.apply(ctx));
+});
+
 test('DSH 工具：generate → verify → doctor', async (t) => {
   const dir = makeTempDir('la-dsh-');
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

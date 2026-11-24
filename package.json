@@ -1,6 +1,6 @@
 {
   "name": "@aimcram/agent",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "基于 DeepSeek Harness 的智能学习库生成 Agent（三模式：指定源 / 自主爬取 / 混合）",
   "type": "module",
   "main": "./dsh-plugin/index.mjs",

@@ -616,9 +616,16 @@ const aimcramCommand = {
 /** commands 服务由桌面端提供，插件加载时可能尚未就绪，故允许延迟注册。 */
 function registerCommand(ctx) {
   const register = (scope) => {
-    if (!scope?.commands || typeof scope.commands.register !== 'function') return false;
+    let commands;
     try {
-      scope.commands.register(aimcramCommand);
+      // 未 inject 时访问服务会抛错；无头环境本来就没有 commands，静默跳过
+      commands = scope?.commands;
+    } catch {
+      return false;
+    }
+    if (!commands || typeof commands.register !== 'function') return false;
+    try {
+      commands.register(aimcramCommand);
       return true;
     } catch (err) {
       console.warn(`[aimcram-agent] /aimcram 注册失败：${err?.message || err}`);
@@ -628,6 +635,7 @@ function registerCommand(ctx) {
   if (register(ctx)) return;
   if (typeof ctx.inject === 'function') {
     try {
+      // 桌面端 commands 服务可能晚于本插件就绪，注入后再注册
       ctx.inject(['commands'], (scope) => register(scope));
     } catch (err) {
       console.warn(`[aimcram-agent] 等待 commands 服务失败：${err?.message || err}`);
