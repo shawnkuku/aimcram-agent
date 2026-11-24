@@ -218,7 +218,7 @@ dsh plugin --profile desktop add @aimcram/agent
 dsh plugin --profile desktop add /path/to/aimcram-agent
 ```
 
-桌面版也可以在**设置 → 插件 → 安装**里填包名或绝对路径，重启 Harness 后 `study_library_*` 四个工具即可使用（生成时自动复用 Harness 当前所选模型）。
+桌面版也可以在**设置 → 插件 → 安装**里填包名或绝对路径，重启 Harness 后 5 个工具即可使用（生成时自动复用 Harness 当前所选模型）。
 
 ### 8.2 不装插件，直接用 CLI
 
@@ -229,7 +229,20 @@ npx @aimcram/agent generate --topic "系统架构设计" --pages 6
 
 本仓库内开发时用 `node cli.mjs ...` 等价替代。
 
-### 8.3 工具参数
+### 8.3 斜杠命令 `/aimcram`
+
+在 DSH 对话框输入：
+
+```
+/aimcram 系统架构设计
+```
+
+- 等价联网模式生成，产物写到当前会话目录的 `out/`
+- 由用户主动输入，视为已授权，不弹权限确认
+- 只接受主题，需要其它参数时改用 `study_library_generate`
+- 仅在提供 `commands` 服务的桌面端出现；CLI / ACP 无头环境不影响工具调用
+
+### 8.4 工具参数
 
 | 工具 | 关键参数 |
 |---|---|
@@ -237,6 +250,7 @@ npx @aimcram/agent generate --topic "系统架构设计" --pages 6
 | `study_library_bundle` | `paths` `outFile` `outDir` `name` `version` `title` `force` |
 | `study_library_verify` | `path` `strict` `appVersion` |
 | `study_library_doctor` | 无 |
+| `aimcram_import` | `path` |
 
 生成工具的返回值只包含结构化摘要（规模、来源、抓取、校验、路径），进度实时写入 stderr，避免大段正文占用模型上下文。
 
@@ -245,7 +259,7 @@ npx @aimcram/agent generate --topic "系统架构设计" --pages 6
 ## 第 9 步：测试与质量评测
 
 ```bash
-npm test            # 71 项测试
+npm test            # 115 项测试
 node cli.mjs eval   # 提取质量评测
 ```
 
